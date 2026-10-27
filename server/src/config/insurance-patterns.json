@@ -1,0 +1,63 @@
+{
+  "CAR": {
+    "identifiers": ["CAR", "VEHICLE", "MOTOR", "AUTO", "TWO WHEELER", "BIKE", "SCOOTER", "COMMERCIAL VEHICLE"],
+    "provider": "(?:Provider|Insurer|Insurance\\s*Company|Company\\s*Name)[\\s:]+([^\\n]+)",
+    "policyNo": "(?:Policy|Certificate)\\s*(?:No\\.?|Number|#)[\\s:]+([A-Z0-9-/]+)",
+    "memberName": "(?:Name|Insured\\s*Name|Proposer|Customer\\s*Name)[\\s:]+([A-Za-z \\t.]+)",
+    "effectiveDate": "(?:Effective|Start|Commencement|Inception)\\s*Date[\\s:]+([0-9/\\-.]+)",
+    "doe": "(?:Expiry|End|Valid\\s*Upto)\\s*Date[\\s:]+([0-9/\\-.]+)",
+    "registrationNo": "(?:Reg\\.?|Registration)\\s*(?:No\\.?|Number)[\\s:]+([A-Z0-9- \\t]+)",
+    "vehicleNo": "(?:Vehicle)\\s*(?:No\\.?|Number)[\\s:]+([A-Z0-9- \\t]+)",
+    "vehicleType": "(?:Vehicle\\s*Type|Class\\s*of\\s*Vehicle)[\\s:]+([A-Za-z0-9 \\t]+)",
+    "engineNo": "(?:Engine)\\s*(?:No\\.?|Number)[\\s:]+([A-Z0-9-]+)",
+    "chassisNo": "(?:Chassis|VIN)\\s*(?:No\\.?|Number)[\\s:]+([A-Z0-9-]+)",
+    "make": "(?:Make|Manufacturer)[\\s:]+([A-Za-z0-9 \\t]+)",
+    "model": "(?:Model)[\\s:]+([A-Za-z0-9 \\t-]+)",
+    "variant": "(?:Variant|Version)[\\s:]+([A-Za-z0-9 \\t-]+)",
+    "manufacturingYear": "(?:Mfg|Manufacturing|Year\\s*of\\s*Mfg)[\\s:]*([0-9]{4})",
+    "idv": "(?:IDV|Insured\\s*Declared\\s*Value)[\\s:]*(?:Rs\\.?|INR)?\\s*([0-9.,]+)",
+    "ncb": "(?:NCB|No\\s*Claim\\s*Bonus)[\\s:]*([0-9]+%?)",
+    "fuelType": "(?:Fuel|Fuel\\s*Type)[\\s:]+([A-Za-z]+)"
+  },
+  "HEALTH": {
+    "identifiers": ["HEALTH", "MEDICAL", "MEDICAL INSURANCE", "HEALTH INSURANCE", "MEDICLAIM", "HOSPITALIZATION"],
+    "provider": "(?:Provider|Insurer|Insurance\\s*Company|Company\\s*Name)[\\s:]+([^\\n]+)",
+    "policyNo": "(?:Policy|Certificate)\\s*(?:No\\.?|Number|#)[\\s:]+([A-Z0-9-/]+)",
+    "memberName": "(?:Member|Insured|Patient|Name)[\\s:]+([A-Za-z \\t.]+)",
+    "effectiveDate": "(?:Coverage\\s*Start|Effective\\s*Date|Start\\s*Date)[\\s:]+([0-9/\\-.]+)",
+    "doe": "(?:Coverage\\s*End|Expiry\\s*Date|End\\s*Date)[\\s:]+([0-9/\\-.]+)",
+    "healthCardNo": "(?:Health\\s*Card|Card|UHID|Member\\s*ID)\\s*(?:No\\.?|Number)[\\s:]+([A-Z0-9-/]+)",
+    "tpa": "(?:TPA|Third\\s*Party\\s*Administrator)[\\s:]+([A-Za-z \\t.]+)",
+    "networkHospital": "(?:Network\\s*Hospital|Hospital)[\\s:]+([A-Za-z \\t.]+)",
+    "sumInsured": "(?:Sum\\s*Insured|Coverage\\s*Amount)[\\s:]*(?:Rs\\.?|INR)?\\s*([0-9.,]+)",
+    "copayPercentage": "(?:Co-?pay|Co-payment)[\\s:]*([0-9]+%?)",
+    "roomRentLimit": "(?:Room\\s*Rent\\s*Limit|Room\\s*Limit)[\\s:]+([A-Za-z0-9., \\t]+)",
+    "hospitalizationLimit": "(?:Hospitalization\\s*Limit)[\\s:]+([A-Za-z0-9., \\t]+)",
+    "waitingPeriod": "(?:Waiting\\s*Period)[\\s:]+([A-Za-z0-9 \\t]+)",
+    "preExistingDisease": "(?:Pre-Existing\\s*Disease|PED)[\\s:]+([A-Za-z0-9 \\t]+)"
+  },
+  "LIFE": {
+    "identifiers": ["LIFE", "TERMINAL", "ENDOWMENT", "TERM PLAN", "WHOLE LIFE"],
+    "provider": "(?:Provider|Insurer|Insurance\\s*Company|Company\\s*Name)[\\s:]+([^\\n]+)",
+    "policyNo": "(?:Policy|Certificate)\\s*(?:No\\.?|Number|#)[\\s:]+([A-Z0-9-/]+)",
+    "lifeAssured": "(?:Life\\s*Assured|Insured\\s*Person)[\\s:]+([A-Za-z \\t.]+)",
+    "nomineeName": "(?:Nominee|Beneficiary)[\\s:]+([A-Za-z \\t.]+)",
+    "premium": "(?:Premium|Installment\\s*Premium)[\\s:]*(?:Rs\\.?|INR)?\\s*([0-9.,]+)",
+    "deathBenefit": "(?:Death\\s*Benefit|Sum\\s*Assured)[\\s:]*(?:Rs\\.?|INR)?\\s*([0-9.,]+)",
+    "maturityBenefit": "(?:Maturity\\s*Benefit)[\\s:]*(?:Rs\\.?|INR)?\\s*([0-9.,]+)",
+    "maturityDate": "(?:Maturity\\s*Date)[\\s:]+([0-9/\\-.]+)",
+    "policyTermYears": "(?:Policy\\s*Term|Term)[\\s:]+([0-9]+\\s*(?:Years?|Yrs?))"
+  },
+  "TRAVEL": {
+    "identifiers": ["TRAVEL", "TOURISM", "TRAVEL INSURANCE", "OVERSEAS", "TRIP"],
+    "provider": "(?:Provider|Insurer|Insurance\\s*Company|Company\\s*Name)[\\s:]+([^\\n]+)",
+    "policyNo": "(?:Policy|Certificate)\\s*(?:No\\.?|Number|#)[\\s:]+([A-Z0-9-/]+)",
+    "travelStartDate": "(?:Start\\s*Date|Journey\\s*Start)[\\s:]+([0-9/\\-.]+)",
+    "travelEndDate": "(?:End\\s*Date|Journey\\s*End)[\\s:]+([0-9/\\-.]+)",
+    "destination": "(?:Destination|Visiting\\s*Country)[\\s:]+([A-Za-z \\t,]+)",
+    "departureCountry": "(?:Departure|Leaving\\s*From)[\\s:]+([A-Za-z \\t,]+)",
+    "arrivalCountry": "(?:Arrival|Returning\\s*To)[\\s:]+([A-Za-z \\t,]+)",
+    "tripType": "(?:Trip\\s*Type|Plan\\s*Type)[\\s:]+([A-Za-z \\t]+)",
+    "travellerCount": "(?:Travellers?|No\\.\\s*of\\s*Persons)[\\s:]+([0-9]+)"
+  }
+}

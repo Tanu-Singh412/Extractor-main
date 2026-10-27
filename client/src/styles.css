@@ -1,0 +1,90 @@
+/* Global styling and theming */
+:root {
+  --color-primary: hsl(220, 80%, 55%);
+  --color-accent: hsl(260, 70%, 60%);
+  --color-bg-light: hsl(0, 0%, 98%);
+  --color-bg-dark: hsl(210, 30%, 10%);
+  --color-text-light: hsl(0, 0%, 10%);
+  --color-text-dark: hsl(0, 0%, 90%);
+  --glass-bg: rgba(255, 255, 255, 0.15);
+  --glass-border: rgba(255, 255, 255, 0.2);
+}
+
+[data-theme='light'] {
+  --bg: var(--color-bg-light);
+  --text: var(--color-text-light);
+}
+[data-theme='dark'] {
+  --bg: var(--color-bg-dark);
+  --text: var(--color-text-dark);
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', 'Outfit', sans-serif;
+  transition: background 0.3s, color 0.3s;
+}
+
+.app-container {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar {
+  background: var(--glass-bg);
+  backdrop-filter: blur(10px);
+  border-right: 1px solid var(--glass-border);
+}
+
+.toast-container {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  z-index: 2000;
+}
+
+.toast {
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+  animation: fadeIn 0.3s ease-out;
+}
+.toast-success { background: #4caf50; color: #fff; }
+.toast-error { background: #f44336; color: #fff; }
+.toast-info { background: #2196f3; color: #fff; }
+
+@keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+
+/* Progress bar */
+.progress-bar {
+  width: 100%;
+  height: 6px;
+  background: var(--glass-bg);
+  overflow: hidden;
+  border-radius: 3px;
+  margin-top: 0.5rem;
+}
+.progress-bar-inner {
+  height: 100%;
+  background: var(--color-primary);
+  width: 0%;
+  transition: width 0.3s ease;
+}
+
+/* Theme toggle button */
+.theme-toggle {
+  background: none;
+  border: none;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 1.2rem;
+  margin-left: auto;
+}

@@ -1,0 +1,7 @@
+node_modules/
+**/node_modules/
+.env
+**/.env
+server/data/admins.json
+server/data/admins.json.*.tmp
+    

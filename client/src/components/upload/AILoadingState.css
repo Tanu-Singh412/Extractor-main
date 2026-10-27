@@ -294,8 +294,11 @@
   width: 16px;
   user-select: none;
   text-align: right;
-  color: var(--text-light, #8a9087);
+  color: var(--accent, #315e48);
+  font-weight: 600;
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
+  opacity: 0.85;
 }
 
 .kokonut-log-text {

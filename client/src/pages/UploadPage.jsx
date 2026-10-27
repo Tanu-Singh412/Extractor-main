@@ -243,147 +243,138 @@ export default function UploadPage({
     setShowAILoader(true);
 
     const template = getExtractionStepsTemplate(documentType, files.length);
-    let activeSteps = template.map((s, idx) => {
-      if (idx === 0) {
-        return { ...s, status: "running", detail: [s.detail[0]] };
-      }
-      return { ...s, status: "pending", detail: [] };
-    });
-    setAgentSteps(activeSteps);
+    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-    let currentStepIdx = 0;
-    let currentLineIdx = 1;
+    // Initialize all steps as pending
+    let stepsState = template.map((s) => ({ ...s, status: "pending", detail: [] }));
+    setAgentSteps(stepsState);
+
+    // Launch background OCR API call concurrently with the animation
+    const apiPromise = files.length === 1
+      ? api.scanSingle(files[0], documentType)
+      : api.scanMerge(files, documentType);
 
     try {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-      intervalRef.current = setInterval(() => {
-        setAgentSteps(prevSteps => {
-          if (!prevSteps) return prevSteps;
-          const updated = prevSteps.map(s => ({ ...s, detail: [...(s.detail || [])] }));
-          const runningStep = updated[currentStepIdx];
-          if (!runningStep) return prevSteps;
+      // Step 0: Preparing document & image
+      stepsState = stepsState.map((s, idx) => idx === 0 ? { ...s, status: "running", detail: [] } : s);
+      setAgentSteps([...stepsState]);
 
-          const stepTemplate = template[currentStepIdx];
-          const fullLines = stepTemplate ? stepTemplate.detail : [];
+      const step0Lines = template[0].detail || [];
+      for (let i = 0; i < step0Lines.length; i++) {
+        await sleep(400);
+        stepsState[0].detail = step0Lines.slice(0, i + 1);
+        setAgentSteps([...stepsState]);
+      }
+      await sleep(250);
+      stepsState[0].status = "done";
+      setAgentSteps([...stepsState]);
 
-          if (currentLineIdx < fullLines.length) {
-            runningStep.detail = fullLines.slice(0, currentLineIdx + 1);
-            currentLineIdx++;
-            return updated;
-          } else if (currentStepIdx < 2) {
-            // Complete current step and transition to next
-            runningStep.status = "done";
-            currentStepIdx++;
-            currentLineIdx = 1;
-            const nextStep = updated[currentStepIdx];
-            if (nextStep) {
-              nextStep.status = "running";
-              nextStep.detail = (template[currentStepIdx].detail || []).slice(0, 1);
-            }
-            return updated;
-          }
-          return prevSteps;
-        });
-      }, 700);
+      // Step 1: Reading document text (OCR)
+      stepsState[1].status = "running";
+      setAgentSteps([...stepsState]);
 
-      let resData;
-      if (files.length === 1) {
-        resData = await api.scanSingle(files[0], documentType);
-      } else {
-        // Use scanMerge: server concatenates OCR text from all pages then parses once
-        resData = await api.scanMerge(files, documentType);
+      const step1Lines = template[1].detail || [];
+      for (let i = 0; i < step1Lines.length; i++) {
+        await sleep(450);
+        stepsState[1].detail = step1Lines.slice(0, i + 1);
+        setAgentSteps([...stepsState]);
+      }
+      await sleep(250);
+      stepsState[1].status = "done";
+      setAgentSteps([...stepsState]);
+
+      // Step 2: Finding information
+      stepsState = stepsState.map((s, idx) => idx === 2 ? { ...s, status: "running", detail: [] } : s);
+      setAgentSteps([...stepsState]);
+
+      const step2Lines = template[2].detail || [];
+      for (let i = 0; i < step2Lines.length; i++) {
+        await sleep(380);
+        stepsState[2].detail = step2Lines.slice(0, i + 1);
+        setAgentSteps([...stepsState]);
       }
 
-      if (intervalRef.current) clearInterval(intervalRef.current);
+      // Wait for server OCR response
+      const resData = await apiPromise;
 
-      if (resData.success) {
-        // Both single and merged responses return a unified `data` object
-        setEditId(null);
-        if (onClearEdit) onClearEdit();
-        const info = resData.data || {};
-        const detectedDocType = info.docType || documentType;
-        setDocumentType(detectedDocType);
-
-        const { firstName: cleanedFirstName, lastName: cleanedLastName, memberName: memberNameVal } =
-          applyProperNameHandling(info, detectedDocType);
-
-        const isIns = detectedDocType === "INSURANCE";
-        const parseLogs = isIns
-          ? [
-            `Policy Number: ${info.policyNo || "Found"}`,
-            `Policyholder: ${memberNameVal || info.memberName || "Found"}`,
-            `Vehicle / Motor: ${info.vehicleNo || info.engineNo || "Details found"}`,
-          ]
-          : [
-            `Passport Number: ${info.passportNo || "Found"}`,
-            `Full Name: ${(cleanedFirstName || "") + " " + (cleanedLastName || "")}`.trim() || "Found",
-            `Birth Date & Code: Verified`,
-          ];
-
-        const verifyLogs = isIns
-          ? [
-            `Valid: ${info.doi || "Start"} to ${info.doe || "Expiry"}`,
-            "Coverage & vehicle details checked",
-            "Form filled and ready to review",
-          ]
-          : [
-            `Valid: ${info.doi || "Issue"} to ${info.doe || "Expiry"}`,
-            `Address & Family details: Added`,
-            "Form filled and ready to review",
-          ];
-
-
-        setAgentSteps(prev => {
-          if (!prev) return prev;
-          return prev.map((s, idx) => {
-            if (idx === 0) return { ...s, status: "done", detail: template[0].detail };
-            if (idx === 1) return { ...s, status: "done", detail: template[1].detail };
-            if (idx === 2) return { ...s, status: "done", detail: parseLogs };
-            if (idx === 3) return { ...s, status: "done", detail: verifyLogs };
-            return { ...s, status: "done" };
-          });
-        });
-
-        setFormState({
-          ...EMPTY_FORM,
-          ...info,
-          docType: detectedDocType,
-          lastName: cleanedLastName || info.lastName || info.surname || "",
-          firstName: cleanedFirstName || info.firstName || info.givenNames || "",
-          memberName: memberNameVal || info.memberName || "",
-          fatherName: cleanRelativeName((info.fatherName || "").replace(/\bKgarwal\b/gi, "Agarwal")),
-          motherName: cleanRelativeName((info.motherName || "").replace(/\bKgarwal\b/gi, "Agarwal")),
-          spouseName: cleanRelativeName(info.spouseName || "")
-        });
-
-        if (resData.previewUrl || resData.imageUrl) {
-          const sUrl = resData.previewUrl || resData.imageUrl;
-          setPreviewImage((prev) => {
-            if (prev && prev.startsWith("__PDF__:") && prev.includes(":::blob:")) {
-              return prev;
-            }
-            if (sUrl.toLowerCase().includes(".pdf")) {
-              return `__PDF__:${resData.fileName || "document.pdf"}:::${sUrl}`;
-            }
-            return sUrl;
-          });
-        }
-
-        const label = detectedDocType === "INSURANCE" ? "Insurance" : "Passport";
-        const pagesMsg = files.length > 1 ? ` (from ${files.length} pages)` : "";
-        addToast(`${label} data extracted successfully!${pagesMsg}`, "success");
-      } else {
-        setAgentSteps(prev => {
-          if (!prev) return prev;
-          return prev.map(s => {
-            if (s.status === "running") {
-              return { ...s, status: "error", detail: [...(s.detail || []), "Server could not parse document structure."] };
-            }
-            return s;
-          });
-        });
+      if (!resData || !resData.success) {
+        stepsState[2].status = "error";
+        stepsState[2].detail = ["Server could not parse document structure."];
+        setAgentSteps([...stepsState]);
         addToast("Server could not parse the document(s). Please verify manually.", "error");
+        setIsScanning(false);
+        return;
       }
+
+      const info = resData.data || {};
+      const detectedDocType = info.docType || documentType;
+      setDocumentType(detectedDocType);
+
+      const { firstName: cleanedFirstName, lastName: cleanedLastName, memberName: memberNameVal } =
+        applyProperNameHandling(info, detectedDocType);
+
+      await sleep(220);
+      stepsState[2].status = "done";
+      setAgentSteps([...stepsState]);
+
+      // Step 3: Checking details & filling form
+      stepsState = stepsState.map((s, idx) => idx === 3 ? { ...s, status: "running", detail: [] } : s);
+      setAgentSteps([...stepsState]);
+
+      const isIns = detectedDocType === "INSURANCE";
+      const step3Lines = isIns
+        ? [
+          `Valid: ${info.doi || "Policy start"} to ${info.doe || "Expiry"}`,
+          "Coverage & vehicle details checked",
+          "Form filled and ready to review",
+        ]
+        : [
+          `Valid: ${info.doi || "Issue"} to ${info.doe || "Expiry"}`,
+          "Address & Family details checked",
+          "Form filled and ready to review",
+        ];
+
+      for (let i = 0; i < step3Lines.length; i++) {
+        await sleep(350);
+        stepsState[3].detail = step3Lines.slice(0, i + 1);
+        setAgentSteps([...stepsState]);
+      }
+      await sleep(300);
+      stepsState[3].status = "done";
+      setAgentSteps([...stepsState]);
+
+      // Populate extracted information into form
+      setEditId(null);
+      if (onClearEdit) onClearEdit();
+
+      setFormState({
+        ...EMPTY_FORM,
+        ...info,
+        docType: detectedDocType,
+        lastName: cleanedLastName || info.lastName || info.surname || "",
+        firstName: cleanedFirstName || info.firstName || info.givenNames || "",
+        memberName: memberNameVal || info.memberName || "",
+        fatherName: cleanRelativeName((info.fatherName || "").replace(/\bKgarwal\b/gi, "Agarwal")),
+        motherName: cleanRelativeName((info.motherName || "").replace(/\bKgarwal\b/gi, "Agarwal")),
+        spouseName: cleanRelativeName(info.spouseName || "")
+      });
+
+      if (resData.previewUrl || resData.imageUrl) {
+        const sUrl = resData.previewUrl || resData.imageUrl;
+        setPreviewImage((prev) => {
+          if (prev && prev.startsWith("__PDF__:") && prev.includes(":::blob:")) {
+            return prev;
+          }
+          if (sUrl.toLowerCase().includes(".pdf")) {
+            return `__PDF__:${resData.fileName || "document.pdf"}:::${sUrl}`;
+          }
+          return sUrl;
+        });
+      }
+
+      const label = detectedDocType === "INSURANCE" ? "Insurance" : "Passport";
+      const pagesMsg = files.length > 1 ? ` (from ${files.length} pages)` : "";
+      addToast(`${label} data extracted successfully!${pagesMsg}`, "success");
     } catch (err) {
       console.error("Scan error:", err);
       if (intervalRef.current) clearInterval(intervalRef.current);
@@ -391,14 +382,13 @@ export default function UploadPage({
         if (!prev) return prev;
         return prev.map(s => {
           if (s.status === "running") {
-            return { ...s, status: "error", detail: [...(s.detail || []), `Error: ${err.message || "Extraction failed"}`] };
+            return { ...s, status: "error", detail: [...(s.detail || []), "Unexpected error during document processing."] };
           }
           return s;
         });
       });
-      addToast(err.message || "OCR upload error. Check backend connections.", "error");
+      addToast("Failed to process document. Please try again.", "error");
     } finally {
-      if (intervalRef.current) clearInterval(intervalRef.current);
       setIsScanning(false);
     }
   };
@@ -569,7 +559,7 @@ export default function UploadPage({
               <AILoadingState
                 steps={agentSteps}
                 documentType={documentType}
-                collapseWhenDone={false}
+                collapseWhenDone={true}
               />
             )}
 

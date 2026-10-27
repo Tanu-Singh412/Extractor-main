@@ -18,7 +18,14 @@ export default function Sidebar({
   expiringSoonCount,
   expiredCount,
   currentUser,
-  onLogout
+  onLogout,
+  companyFilter = "ALL",
+  setCompanyFilter,
+  companies = [],
+  companyCounts = {},
+  registryDocType = "ALL",
+  setRegistryDocType,
+  docTypeCounts = { passport: 0, insurance: 0 }
 }) {
   const route = currentRoute || activeTab || "UPLOAD";
   const navigate = onNavigate || setActiveTab;
@@ -101,8 +108,11 @@ export default function Sidebar({
             Record status
           </div>
           <button
-            className={`nav-btn nav-filter-btn ${filterMode === "ALL" && route === "REGISTRY" ? "active" : ""}`}
-            onClick={() => handleFilterClick("ALL")}
+            className={`nav-btn nav-filter-btn ${filterMode === "ALL" && (!companyFilter || companyFilter === "ALL") && route === "REGISTRY" ? "active" : ""}`}
+            onClick={() => {
+              handleFilterClick("ALL");
+              if (setCompanyFilter) setCompanyFilter("ALL");
+            }}
           >
             <i className="fa-solid fa-layer-group"></i>
             <span style={{ flex: 1 }}>All Records</span>
@@ -132,6 +142,81 @@ export default function Sidebar({
             <span style={{ flex: 1 }}>Expired</span>
             <span className="sidebar-count-pill pill-expired">{expiredCount}</span>
           </button>
+
+          {/* Categories */}
+          {/* <div className="nav-section-label" style={{ marginTop: "14px" }}>
+            Categories
+          </div>
+          <button
+            className={`nav-btn nav-filter-btn ${registryDocType === "PASSPORT" && route === "REGISTRY" ? "active" : ""}`}
+            onClick={() => {
+              if (setRegistryDocType) setRegistryDocType(registryDocType === "PASSPORT" ? "ALL" : "PASSPORT");
+              navigate("REGISTRY");
+              closeMobileSidebar();
+              setIsSidebarOpen(false);
+            }}
+          >
+            <i className="fa-solid fa-passport" style={{ color: "var(--accent)" }}></i>
+            <span style={{ flex: 1 }}>Passports</span>
+            <span className="sidebar-count-pill pill-neutral">{docTypeCounts.passport || 0}</span>
+          </button>
+          <button
+            className={`nav-btn nav-filter-btn ${registryDocType === "INSURANCE" && route === "REGISTRY" ? "active" : ""}`}
+            onClick={() => {
+              if (setRegistryDocType) setRegistryDocType(registryDocType === "INSURANCE" ? "ALL" : "INSURANCE");
+              navigate("REGISTRY");
+              closeMobileSidebar();
+              setIsSidebarOpen(false);
+            }}
+          >
+            <i className="fa-solid fa-shield-halved" style={{ color: "var(--emerald)" }}></i>
+            <span style={{ flex: 1 }}>Insurance</span>
+            <span className="sidebar-count-pill pill-neutral">{docTypeCounts.insurance || 0}</span>
+          </button> */}
+
+          {/* Group / Company dropdown */}
+          {companies && companies.length > 0 && (
+            <div style={{ marginTop: "12px", padding: "0 4px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                <span className="nav-section-label" style={{ padding: 0, fontSize: "10px" }}>Group / Company</span>
+                {companyFilter && companyFilter !== "ALL" && (
+                  <button
+                    type="button"
+                    onClick={() => setCompanyFilter?.("ALL")}
+                    style={{ fontSize: "10px", color: "var(--accent)", fontWeight: 600, background: "none", border: "none", cursor: "pointer", padding: 0 }}
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+              <select
+                className="form-control"
+                value={companyFilter || "ALL"}
+                onChange={(e) => {
+                  if (setCompanyFilter) setCompanyFilter(e.target.value);
+                  navigate("REGISTRY");
+                  closeMobileSidebar();
+                  setIsSidebarOpen(false);
+                }}
+                style={{
+                  width: "100%",
+                  height: "32px",
+                  fontSize: "12px",
+                  borderRadius: "var(--radius-xs, 5px)",
+                  background: companyFilter && companyFilter !== "ALL" ? "var(--emerald-bg, #eef5ef)" : "#fff",
+                  borderColor: companyFilter && companyFilter !== "ALL" ? "var(--accent)" : "var(--border)",
+                  color: "var(--text-primary)"
+                }}
+              >
+                <option value="ALL">All Companies</option>
+                {companies.map((c) => (
+                  <option key={c.id || c.name} value={c.name}>
+                    {c.name} {companyCounts?.[c.name] ? `(${companyCounts[c.name]})` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </nav>
 
         <div className="sidebar-footer">

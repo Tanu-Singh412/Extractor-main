@@ -38,6 +38,7 @@ export default function App() {
 
   // Filter & Navigation states shared between Header, Sidebar & Registry
   const [filterMode, setFilterMode] = useState("ALL");
+  const [companyFilter, setCompanyFilter] = useState("ALL");
   const [registryDocType, setRegistryDocType] = useState("ALL");
   const [searchQuery, setSearchQuery] = useState("");
   const [expiryWindowDays, setExpiryWindowDays] = useState(60);
@@ -166,8 +167,19 @@ export default function App() {
       setFilterMode(prev => (prev === mode ? "ALL" : mode));
     };
 
+    const companyCounts = useMemo(() => {
+      const counts = {};
+      passports.forEach(item => {
+        if (item.company) {
+          counts[item.company] = (counts[item.company] || 0) + 1;
+        }
+      });
+      return counts;
+    }, [passports]);
+
     const handleResetAllFilters = () => {
       setFilterMode("ALL");
+      setCompanyFilter("ALL");
       setRegistryDocType("ALL");
       setSearchQuery("");
       setExpiryWindowDays(60);
@@ -201,6 +213,10 @@ export default function App() {
         setActiveTab={navigateTo}
         filterMode={filterMode}
         setFilterMode={setFilterMode}
+        companyFilter={companyFilter}
+        setCompanyFilter={setCompanyFilter}
+        companies={companies}
+        companyCounts={companyCounts}
         setIsSidebarOpen={setIsSidebarOpen}
         mobileSidebarOpen={mobileSidebarOpen}
         closeMobileSidebar={closeMobileSidebar}
@@ -210,6 +226,9 @@ export default function App() {
         expiredCount={activeStats.expiredCount}
         currentUser={currentUser}
         onLogout={handleLogout}
+        registryDocType={registryDocType}
+        setRegistryDocType={setRegistryDocType}
+        docTypeCounts={docTypeCounts}
       />
 
       <div className="main-content">
@@ -252,6 +271,8 @@ export default function App() {
             passports={passports}
             filterMode={filterMode}
             setFilterMode={setFilterMode}
+            companyFilter={companyFilter}
+            setCompanyFilter={setCompanyFilter}
             isSidebarOpen={isSidebarOpen}
             setIsSidebarOpen={setIsSidebarOpen}
             sidebarFilterMode={sidebarFilterMode}

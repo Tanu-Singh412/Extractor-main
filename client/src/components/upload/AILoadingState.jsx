@@ -138,7 +138,7 @@ function useDemoRun(enabled, rootRef, demoSteps = ACCURATE_PASSPORT_STEPS) {
 
   return demoSteps.map((step, i) => {
     if (i < position.step) {
-      return { ...step, status: "done" };
+      return { ...step, status: "done", detail: [] };
     }
     if (i === position.step) {
       return {
@@ -147,7 +147,7 @@ function useDemoRun(enabled, rootRef, demoSteps = ACCURATE_PASSPORT_STEPS) {
         detail: step.detail?.slice(0, position.line),
       };
     }
-    return { ...step, status: "pending" };
+    return { ...step, status: "pending", detail: [] };
   });
 }
 
@@ -253,12 +253,12 @@ function StepLog({ lines }) {
       >
         {lines.map((line, index) => (
           <motion.div
-            animate={{ opacity: 1 }}
+            animate={{ opacity: 1, y: 0 }}
             className="kokonut-log-row"
-            initial={{ opacity: 0 }}
+            initial={{ opacity: 0, y: 3 }}
             key={`${index}-${line}`}
             style={{ height: LINE_HEIGHT }}
-            transition={{ duration: 0.2, ease: EASE_OUT }}
+            transition={{ duration: 0.22, ease: EASE_OUT }}
           >
             <span className="kokonut-log-num">{index + 1}</span>
             <span className="kokonut-log-text">{line}</span>
@@ -402,9 +402,20 @@ function StepRow({ step, time, isLast }) {
             </motion.span>
           )}
         </div>
-        {step.status === "running" && step.detail?.length ? (
-          <StepLog lines={step.detail} />
-        ) : null}
+        <AnimatePresence initial={false}>
+          {step.status === "running" && step.detail?.length > 0 && (
+            <motion.div
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              initial={{ height: 0, opacity: 0 }}
+              key="step-log-panel"
+              style={{ overflow: "hidden" }}
+              transition={{ duration: 0.22, ease: EASE_OUT }}
+            >
+              <StepLog lines={step.detail} />
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </li>
   );
@@ -430,14 +441,19 @@ export default function AILoadingState({
   const seconds = useElapsed(isActive, isDone);
   const times = useStepTimes(steps);
 
-  const shouldCollapse = isDone && collapseWhenDone;
-  const [isOpen, setIsOpen] = useState(!shouldCollapse);
-  const [wasCollapsed, setWasCollapsed] = useState(shouldCollapse);
+  const [isOpen, setIsOpen] = useState(true);
 
-  if (wasCollapsed !== shouldCollapse) {
-    setWasCollapsed(shouldCollapse);
-    setIsOpen(!shouldCollapse);
-  }
+  // Automatically collapse after completing, with a slight delay so user sees completion
+  useEffect(() => {
+    if (isDone && collapseWhenDone) {
+      const timer = setTimeout(() => {
+        setIsOpen(false);
+      }, 700);
+      return () => clearTimeout(timer);
+    } else if (isActive) {
+      setIsOpen(true);
+    }
+  }, [isDone, isActive, collapseWhenDone]);
 
   let title = "Getting ready...";
   if (failed) {

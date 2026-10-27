@@ -51,18 +51,18 @@ const cleanNameField = (s, rawText = '') => {
             }
         }
 
-        // Visual mismatch trim — only trim last char if the full word is NOT already
-        // a standalone plausible name token (all-alpha, >= 5 chars), to avoid wrongly
-        // trimming e.g. ANUBHAV → ANUBHA just because OCR visual shows ANUBHAY
+        // Visual mismatch trim: only trim if word ends with suspicious OCR chevron/digit
         if (visTextUpper && w.length >= 4 && !visTextUpper.includes(w)) {
+            // If the visual text has a 1-character difference (e.g. SOLANKT vs SOLANKI), keep MRZ as authority
             const trimmed = w.slice(0, -1);
-            // Only trim if: trimmed form exists in visual text AND full word is short or ends in common OCR suffix
-            const isOcrSuffix = /[YVBZ]$/.test(w);
-            if (trimmed.length >= 3 && visTextUpper.includes(trimmed) && !isOcrSuffix) return trimmed;
+            if (/[0-9<]$/.test(w) && trimmed.length >= 3 && visTextUpper.includes(trimmed)) {
+                return trimmed;
+            }
         }
-        if (w.length >= 4 && /[CSK10]$/.test(w)) {
-            const trimmed = w.slice(0, -1);
-            if (trimmed.length >= 3) return trimmed;
+        // Strip trailing digits or literal chevrons that leaked into token
+        if (/[0-9<]$/.test(w)) {
+            const trimmed = w.replace(/[0-9<]+$/, '');
+            if (trimmed.length >= 2) return trimmed;
         }
         return w;
     }).join(' ').trim();
@@ -79,6 +79,17 @@ function reconcileNames(mrzName, visName, rawText = '') {
     if (/LOREM|IPSUM|MIPSUM|SPECIMEN|TRAVEL|DOCUMENT/.test(mrz)) return vis;
 
     if (mrz === vis) return mrz;
+
+    // If visual text has MRZ name plus trailing 1-2 letter OCR noise (e.g. "DEEPAK CE" vs "DEEPAK")
+    if (vis.startsWith(mrz) && vis.length > mrz.length) {
+        const trailing = vis.slice(mrz.length).trim();
+        if (trailing.length <= 2 || NAME_BAD_EXACT.has(trailing)) return mrz;
+    }
+    if (mrz.startsWith(vis) && mrz.length > vis.length) {
+        const trailing = mrz.slice(vis.length).trim();
+        if (trailing.length <= 2) return vis;
+    }
+
     // Handle single character OCR noise (e.g., MRZ "AGARWALS" vs Visual "AGARWAL")
     if (mrz.startsWith(vis) && mrz.length === vis.length + 1) return vis;
     if (vis.startsWith(mrz) && vis.length === mrz.length + 1) return mrz;

@@ -118,17 +118,27 @@ function applyFieldFallbacks(result, rawText, { lines, visualSurname, visualGive
     if (!result.placeOfIssue) {
         for (const l of lines) {
             const up = l.toUpperCase().trim();
-            if (/\b(GHAZIABAD|AGRA|DELHI|MUMBAI|CHENNAI|KOLKATA|BENGALURU|HYDERABAD|PUNE|JAIPUR|LUCKNOW)\b/.test(up)
+            const cleanUp = up.replace(/[^A-Z\s]/g, ' ');
+            if (/\b(GHAZIABAD|AGRA|DELHI|MUMBAI|CHENNAI|KOLKATA|BENGALURU|HYDERABAD|PUNE|JAIPUR|LUCKNOW)\b/.test(cleanUp)
                 && !/(PASSPORT|DOB|BIRTH|EXPIR|ADDRESS|PIN|OLD|PREVIOUS)/.test(up)) {
-                const m = up.match(/\b(GHAZIABAD|AGRA|DELHI|MUMBAI|CHENNAI|KOLKATA|BENGALURU|HYDERABAD|PUNE|JAIPUR|LUCKNOW)\b/);
+                const m = cleanUp.match(/\b(GHAZIABAD|AGRA|DELHI|MUMBAI|CHENNAI|KOLKATA|BENGALURU|HYDERABAD|PUNE|JAIPUR|LUCKNOW)\b/);
                 if (m) { result.placeOfIssue = titleCase(m[1]); break; }
             }
         }
     }
     // Priority 2: derive from address
     if (!result.placeOfIssue && result.address) {
-        const cityMatch = result.address.match(/\b(AGRA|DELHI|MUMBAI|GHAZIABAD|CHENNAI|KOLKATA|BENGALURU|HYDERABAD|PUNE|JAIPUR|LUCKNOW)\b/i);
+        const cleanAddr = result.address.toUpperCase().replace(/[^A-Z\s]/g, ' ');
+        const cityMatch = cleanAddr.match(/\b(AGRA|DELHI|MUMBAI|GHAZIABAD|CHENNAI|KOLKATA|BENGALURU|HYDERABAD|PUNE|JAIPUR|LUCKNOW)\b/i);
         if (cityMatch) result.placeOfIssue = titleCase(cityMatch[1]);
+    }
+
+    // Correct Indian passport number (e.g. SD609689 -> S0609689, $0609689 -> S0609689)
+    if (result.passportNo) {
+        const cleanedPn = result.passportNo.replace(/^\$/, 'S');
+        if (result.nationality === 'IND' || result.issuingCountry === 'IND' || /^[A-Z][A-Z0-9]{7}$/.test(cleanedPn)) {
+            result.passportNo = correctIndianPassportNumber(cleanedPn);
+        }
     }
 
     // File number — prefer Indian format (letter + 12-16 digits), then label-anchored

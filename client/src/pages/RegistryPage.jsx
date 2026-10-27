@@ -25,14 +25,17 @@ export default function RegistryPage({
   onEditRecord,
   onDeleteRecord,
   onExportCSV,
-  onExportJSON,
-  companies = []
+  companies = [],
+  companyFilter: externalCompanyFilter,
+  setCompanyFilter: externalSetCompanyFilter
 }) {
   const [currentPage, setCurrentPage] = useState(1);
   const [activeModalRecord, setActiveModalRecord] = useState(null);
   const [recordToDelete, setRecordToDelete] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [companyFilter, setCompanyFilter] = useState("ALL");
+  const [internalCompanyFilter, setInternalCompanyFilter] = useState("ALL");
+  const companyFilter = externalCompanyFilter !== undefined ? externalCompanyFilter : internalCompanyFilter;
+  const setCompanyFilter = externalSetCompanyFilter || setInternalCompanyFilter;
 
   const [prevFilters, setPrevFilters] = useState({ searchQuery, filterMode, registryDocType, expiryWindowDays, companyFilter });
   if (

@@ -260,15 +260,16 @@ export default function PassportForm({
                     title={`Edit name of "${formState.company}"`}
                     style={{
                       fontSize: "12px",
-                      color: "#4f46e5",
+                      color: "var(--accent, #315e48)",
                       background: "none",
                       border: "none",
                       cursor: "pointer",
                       display: "inline-flex",
                       alignItems: "center",
                       gap: "3px",
-                      padding: 0,
-                      fontWeight: 600
+                      padding: "2px 4px",
+                      fontWeight: 600,
+                      borderRadius: "var(--radius-xs, 4px)"
                     }}
                   >
                     <i className="fa-solid fa-pen-to-square"></i>
@@ -287,15 +288,16 @@ export default function PassportForm({
                     title={`Delete "${formState.company}" option`}
                     style={{
                       fontSize: "12px",
-                      color: "#ef4444",
+                      color: "var(--rose, #ad4940)",
                       background: "none",
                       border: "none",
                       cursor: "pointer",
                       display: "inline-flex",
                       alignItems: "center",
                       gap: "3px",
-                      padding: 0,
-                      fontWeight: 600
+                      padding: "2px 4px",
+                      fontWeight: 600,
+                      borderRadius: "var(--radius-xs, 4px)"
                     }}
                   >
                     <i className="fa-solid fa-trash-can"></i>
@@ -311,19 +313,20 @@ export default function PassportForm({
                   }}
                   style={{
                     fontSize: "12px",
-                    color: "#4f46e5",
+                    color: "var(--accent, #315e48)",
                     background: "none",
                     border: "none",
                     cursor: "pointer",
                     display: "inline-flex",
                     alignItems: "center",
                     gap: "3px",
-                    padding: 0,
-                    fontWeight: 600
+                    padding: "2px 4px",
+                    fontWeight: 600,
+                    borderRadius: "var(--radius-xs, 4px)"
                   }}
                 >
                   <i className={`fa-solid ${isAddingCompany ? "fa-xmark" : "fa-plus"}`}></i>
-                  {isAddingCompany ? "Cancel" : "+ New"}
+                  {isAddingCompany ? "Cancel" : "New"}
                 </button>
               </div>
             </div>

@@ -31,13 +31,27 @@ const BAD_MEMBER_NAMES = new Set([
 
 function cleanMemberName(raw) {
     if (!raw) return '';
-    let v = String(raw).replace(/\s+(ISSUE|OFFICE|ADDRESS|CODE|DATE|POLICY|NO\.?|DOB|AGE|GENDER|SEX|PHONE|MOBILE|EMAIL).*/i, '').trim();
+    let v = String(raw).replace(/\s+(ISSUE|ISSUANCE|OFFICE|ADDRESS|CODE|DATE|POLICY|NO\.?|DOB|AGE|GENDER|SEX|PHONE|MOBILE|EMAIL|RTO|BRANCH|REGISTRATION|LOCATION|C\/O|S\/O|W\/O|D\/O).*/i, '').trim();
     // Strip common salutations and label words
     for (let loop = 0; loop < 4; loop++) {
         v = v.replace(/^(?:NAME\s*OF\s*(?:THE\s*)?(?:INSURED|POLICY\s*HOLDER|PROPOSER|CUSTOMER|MEMBER)?|INSURED|MEMBER|CUSTOMER|POLICY|HOLDER|PROPOSER|PATIENT|OF|THE|MR|MRS|MS|DR|SHRI|SMT|MISS|MASTER|M\/S|NUMBER)\b[.:\s\-]*/gi, '').trim();
     }
     v = v.replace(/[^A-Za-z\s.'\-]/g, ' ').replace(/\s+/g, ' ').trim();
     if (v.length < 3 || v.length > 55) return '';
+
+    // Strip trailing location or administrative tokens
+    const words = v.split(/\s+/);
+    while (words.length > 1) {
+        const lastWord = words[words.length - 1].toUpperCase();
+        if (BAD_MEMBER_NAMES.has(lastWord) || ['RTO', 'AGRA', 'DELHI', 'MUMBAI', 'ISSUANCE', 'OFFICE', 'BRANCH', 'AGENCY', 'CODE', 'ZONE', 'HUB'].includes(lastWord)) {
+            words.pop();
+        } else {
+            break;
+        }
+    }
+    v = words.join(' ').trim();
+    if (v.length < 3) return '';
+
     const vUpper = v.toUpperCase();
     if (Array.from(BAD_MEMBER_NAMES).some(b => vUpper.includes(b) || vUpper === b)) return '';
     if (/\d/.test(v)) return ''; // Name cannot contain numbers
@@ -672,8 +686,18 @@ async function parseInsuranceText(rawText) {
     }
 
     result.memberName = titleCase(result.memberName);
-    if (result.make) result.make = titleCase(result.make);
+    if (result.make) {
+        result.make = result.make.replace(/\s*(?:Policy\s*No.*|Model.*|Registration.*|Certificate.*|Type.*|Number.*|Year.*)/i, '').trim();
+        result.make = titleCase(result.make);
+    }
     if (result.fuelType) result.fuelType = titleCase(result.fuelType);
+    if (result.address) {
+        result.address = result.address
+            .replace(/(?:Chassis\s*No\.?|Engine\s*No\.?|Invoice\s*No\.?|Cubic\s*Capacity|Watts|Seats|Seating\s*Capacity)\b[^,.]*[,.]?/gi, '')
+            .replace(/\s+/g, ' ')
+            .replace(/^[,:.\s\-]+|[,:.\s\-]+$/g, '')
+            .trim();
+    }
     const nameTokens = result.memberName ? result.memberName.split(/\s+/) : [];
     result.firstName = nameTokens[0] || '';
     result.lastName = nameTokens.slice(1).join(' ') || '';

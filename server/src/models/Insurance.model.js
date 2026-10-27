@@ -80,7 +80,8 @@ const InsuranceSchema = new mongoose.Schema({
     required: true,
     trim: true,
     set: encrypt,
-    get: decrypt
+    get: decrypt,
+    unique: true
   },
   policyNoHash: {
     type: String,

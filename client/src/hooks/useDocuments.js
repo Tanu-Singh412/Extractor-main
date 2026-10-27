@@ -25,7 +25,6 @@ export function useDocuments(isAuthenticated, onUnauthenticated, addToast) {
   }, [isAuthenticated, loadPassports]);
 
   const deleteRecord = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this record?")) return false;
     try {
       await api.deletePassport(id);
       addToast("Record deleted.", "success");
@@ -38,29 +37,67 @@ export function useDocuments(isAuthenticated, onUnauthenticated, addToast) {
     }
   };
 
-  const exportCSV = async () => {
-    if (!passports.length) {
+  const exportCSV = async (options = {}) => {
+    const opts = typeof options === "string" ? { docType: options } : (options || {});
+    const { docType, filterMode, expiryWindowDays, count } = opts;
+
+    if (count === 0) {
+      addToast("No records match the current filters to export.", "error");
+      return;
+    }
+
+    const hasRecords = passports.length > 0;
+    if (!hasRecords) {
       addToast("Database is empty.", "error");
       return;
     }
+
     try {
-      await api.downloadExport("csv");
-      addToast("CSV exported successfully!", "success");
-    } catch {
-      addToast("Failed to export CSV.", "error");
+      await api.downloadExport("csv", opts);
+      const typeLabel = docType === "PASSPORT" ? "Passport" : docType === "INSURANCE" ? "Insurance" : "Registry";
+      const statusLabel = filterMode && filterMode !== "ALL"
+        ? (filterMode === "EXPIRING_SOON" ? ` (Expiring in ${expiryWindowDays || 60}d)` : ` (${filterMode.replace("_", " ").toLowerCase()})`)
+        : "";
+      addToast(`${typeLabel}${statusLabel} exported to CSV successfully!`, "success");
+    } catch (err) {
+      if (err.message === "UNAUTHORIZED") {
+        onUnauthenticated();
+        addToast("Session expired. Please sign in again.", "error");
+      } else {
+        addToast("Failed to export CSV.", "error");
+      }
     }
   };
 
-  const exportJSON = async () => {
-    if (!passports.length) {
+  const exportJSON = async (options = {}) => {
+    const opts = typeof options === "string" ? { docType: options } : (options || {});
+    const { docType, filterMode, expiryWindowDays, count } = opts;
+
+    if (count === 0) {
+      addToast("No records match the current filters to export.", "error");
+      return;
+    }
+
+    const hasRecords = passports.length > 0;
+    if (!hasRecords) {
       addToast("Database is empty.", "error");
       return;
     }
+
     try {
-      await api.downloadExport("json");
-      addToast("JSON exported successfully!", "success");
-    } catch {
-      addToast("Failed to export JSON.", "error");
+      await api.downloadExport("json", opts);
+      const typeLabel = docType === "PASSPORT" ? "Passport" : docType === "INSURANCE" ? "Insurance" : "Registry";
+      const statusLabel = filterMode && filterMode !== "ALL"
+        ? (filterMode === "EXPIRING_SOON" ? ` (Expiring in ${expiryWindowDays || 60}d)` : ` (${filterMode.replace("_", " ").toLowerCase()})`)
+        : "";
+      addToast(`${typeLabel}${statusLabel} exported to JSON successfully!`, "success");
+    } catch (err) {
+      if (err.message === "UNAUTHORIZED") {
+        onUnauthenticated();
+        addToast("Session expired. Please sign in again.", "error");
+      } else {
+        addToast("Failed to export JSON.", "error");
+      }
     }
   };
 

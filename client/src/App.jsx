@@ -230,6 +230,7 @@ export default function App() {
           style={{ display: currentRoute === "UPLOAD" ? "block" : "none" }}
         >
           <UploadPage
+            existingRecords={passports}
             editingRecord={editingRecord}
             onClearEdit={() => setEditingRecord(null)}
             onRecordSaved={loadPassports}

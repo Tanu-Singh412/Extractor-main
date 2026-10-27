@@ -1,8 +1,9 @@
 import React, { useState } from "react";
 import { validateUploadFiles } from "../../utils/validation";
 
-export default function FileUploadZone({ onFilesSelected, fileInputRef, onError }) {
+export default function FileUploadZone({ onFilesSelected, fileInputRef, onError, documentType = "PASSPORT" }) {
   const [isDragOver, setIsDragOver] = useState(false);
+  const isInsurance = documentType === "INSURANCE";
 
   const handleFiles = (fileList) => {
     if (!fileList?.length) return;
@@ -48,8 +49,12 @@ export default function FileUploadZone({ onFilesSelected, fileInputRef, onError 
           </div>
         </div>
         <div className="upload-text">
-          <h3>Drop your passport pages here</h3>
-          <p className="upload-subtext">Upload both pages for complete extraction</p>
+          <h3>{isInsurance ? "Drop your insurance pages here" : "Drop your passport pages here"}</h3>
+          <p className="upload-subtext">
+            {isInsurance
+              ? "Upload insurance pages for complete extraction"
+              : "Upload both pages for complete extraction"}
+          </p>
           <div className="upload-format-chips">
             <span className="format-chip">PDF</span>
             <span className="format-chip">JPG</span>

@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { REGISTRY_FILE: DB_PATH } = require('../config/paths');
 
-function loadDB() { 
+function loadDB() {
     try {
         if (fs.existsSync(DB_PATH)) return JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
     } catch (e) { console.warn('[DB] Load error:', e.message); }
@@ -21,7 +21,56 @@ let dbRecords = loadDB();
 
 function listRecords() { return dbRecords; }
 
+function findDuplicateIdentifier(fields, excludeId = null) {
+    if (!fields || typeof fields !== 'object') return null;
+
+    if (fields.passportNo) {
+        const pno = String(fields.passportNo).trim().toUpperCase();
+        if (pno) {
+            const match = dbRecords.find(r =>
+                r.id !== excludeId &&
+                r.passportNo &&
+                String(r.passportNo).trim().toUpperCase() === pno
+            );
+            if (match) {
+                return {
+                    field: 'passportNo',
+                    value: pno,
+                    message: `A document with Passport Number "${pno}" is already recorded.`
+                };
+            }
+        }
+    }
+
+    if (fields.policyNo) {
+        const pno = String(fields.policyNo).trim().toUpperCase();
+        if (pno) {
+            const match = dbRecords.find(r =>
+                r.id !== excludeId &&
+                r.policyNo &&
+                String(r.policyNo).trim().toUpperCase() === pno
+            );
+            if (match) {
+                return {
+                    field: 'policyNo',
+                    value: pno,
+                    message: `A document with Policy Number "${String(fields.policyNo).trim()}" is already recorded.`
+                };
+            }
+        }
+    }
+
+    return null;
+}
+
 function createRecord(fields) {
+    const duplicate = findDuplicateIdentifier(fields);
+    if (duplicate) {
+        const err = new Error(duplicate.message);
+        err.statusCode = 409;
+        err.field = duplicate.field;
+        throw err;
+    }
     const { previewImage: _unused, ...cleanFields } = fields || {};
     const newRecord = { id: `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`, ...cleanFields };
     dbRecords.push(newRecord);
@@ -32,6 +81,13 @@ function createRecord(fields) {
 function updateRecord(id, fields) {
     const idx = dbRecords.findIndex(r => r.id === id);
     if (idx === -1) return null;
+    const duplicate = findDuplicateIdentifier(fields, id);
+    if (duplicate) {
+        const err = new Error(duplicate.message);
+        err.statusCode = 409;
+        err.field = duplicate.field;
+        throw err;
+    }
     const { previewImage: _unused, ...cleanFields } = fields || {};
     dbRecords[idx] = { ...dbRecords[idx], ...cleanFields, id };
     saveDB(dbRecords);
@@ -46,4 +102,4 @@ function deleteRecord(id) {
     return true;
 }
 
-module.exports = { listRecords, createRecord, updateRecord, deleteRecord };
+module.exports = { listRecords, createRecord, updateRecord, deleteRecord, findDuplicateIdentifier };

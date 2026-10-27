@@ -3,7 +3,6 @@ import React, { useState } from "react";
 export default function PassportForm({ formState, handleInputChange, formErrors = {} }) {
   const [showOptional, setShowOptional] = useState(() => {
     const optionalVals = [
-      formState.address,
       formState.fatherName,
       formState.motherName,
       formState.spouseName,
@@ -18,8 +17,13 @@ export default function PassportForm({ formState, handleInputChange, formErrors 
     ["placeOfBirth", "Place of Birth", "fa-map-pin", "Place of birth (optional)"]
   ];
 
+  const contactFields = [
+    ["phone", "Phone Number", "fa-phone", "Contact phone number"],
+    ["email", "Email Address", "fa-envelope", "Contact email"],
+    ["address", "Address", "fa-house", "Full residential address"]
+  ];
+
   const collapsibleFields = [
-    ["address", "Address", "fa-house", "Holder's address"],
     ["fatherName", "Father's Name", "fa-user-tie", "Father's full name"],
     ["motherName", "Mother's Name", "fa-user", "Mother's full name"],
     ["spouseName", "Spouse's Name", "fa-user-group", "Spouse's full name (if applicable)"],
@@ -333,7 +337,48 @@ export default function PassportForm({ formState, handleInputChange, formErrors 
         </div>
       </div>
 
-      {/* Section 4: Extended Records (Collapsible Accordion) */}
+      {/* Section 4: Contact & Communication */}
+      <div className="form-section-card">
+        <div className="form-section-header">
+          <div className="section-icon-pill">
+            <i className="fa-solid fa-address-book"></i>
+          </div>
+          <div className="section-header-text">
+            <h4>Contact & Communication</h4>
+            <p>Direct communication channels for passport holder</p>
+          </div>
+          <span className="section-opt-badge">Contact</span>
+        </div>
+
+        <div className="form-grid">
+          {contactFields.map(([name, label, icon, placeholder]) => (
+            <div className="form-group" key={name}>
+              <label htmlFor={`passport-${name}`}>{label}</label>
+              <div className={`input-wrapper ${formErrors[name] ? "has-error" : ""}`}>
+                <i className={`fa-solid ${icon}`}></i>
+                <input
+                  type="text"
+                  id={`passport-${name}`}
+                  name={name}
+                  className={`form-control ${formErrors[name] ? "is-invalid" : ""}`}
+                  placeholder={placeholder}
+                  value={formState[name] || ""}
+                  onChange={handleInputChange}
+                  autoComplete="off"
+                />
+              </div>
+              {formErrors[name] && (
+                <span className="field-error-msg">
+                  <i className="fa-solid fa-circle-exclamation"></i>
+                  {formErrors[name]}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Section 5: Extended Records (Collapsible Accordion) */}
       <div className="form-section-card">
         <div
           className="form-section-header collapsible-header"
@@ -353,7 +398,7 @@ export default function PassportForm({ formState, handleInputChange, formErrors 
           </div>
           <div className="section-header-text">
             <h4>Family & Additional Records</h4>
-            <p>Address, parents, spouse, and file archive references</p>
+            <p>Parents, spouse, and file archive references</p>
           </div>
           <div className="collapsible-action">
             <span className="section-opt-badge">
@@ -368,19 +413,25 @@ export default function PassportForm({ formState, handleInputChange, formErrors 
             {collapsibleFields.map(([name, label, icon, placeholder]) => (
               <div className="form-group" key={name}>
                 <label htmlFor={`passport-${name}`}>{label}</label>
-                <div className="input-wrapper">
+                <div className={`input-wrapper ${formErrors[name] ? "has-error" : ""}`}>
                   <i className={`fa-solid ${icon}`}></i>
                   <input
                     type="text"
-                id={`passport-${name}`}
+                    id={`passport-${name}`}
                     name={name}
-                    className="form-control"
+                    className={`form-control ${formErrors[name] ? "is-invalid" : ""}`}
                     placeholder={placeholder}
                     value={formState[name] || ""}
                     onChange={handleInputChange}
                     autoComplete="off"
                   />
                 </div>
+                {formErrors[name] && (
+                  <span className="field-error-msg">
+                    <i className="fa-solid fa-circle-exclamation"></i>
+                    {formErrors[name]}
+                  </span>
+                )}
               </div>
             ))}
           </div>

@@ -35,7 +35,8 @@ function extractVisualFields(result, text) {
         }
         // ---- NEW: Extra field extraction -------------------------------------------------
             // Address (Keyword-based multi-line extraction – requires explicit label)
-            if (!result.address && /(?:ADDRESS|RESIDENCE)\s*[:\-]/i.test(up) && !/(EMAIL|WEBSITE)/i.test(up)) {
+            // Address (Keyword-based multi-line extraction – requires explicit label)
+            if (!result.address && /(?:ADDRESS|RESIDENCE)\s*[:\-]?/i.test(up) && !/(EMAIL|WEBSITE)/i.test(up)) {
                 const addrMatch = up.match(/(?:ADDRESS|RESIDENCE)\s*[:\-]?\s*(.*)/i);
                 let currentAddrLines = [];
                 if (addrMatch && addrMatch[1].trim()) {
@@ -47,10 +48,13 @@ function extractVisualFields(result, text) {
                     if (!nxt) break;
                     const nxtUp = nxt.toUpperCase();
                     if (nxtUp.includes('<')) break;
-                    if (/(PASSPORT|DOB|ISSUE|EXPIR|NATIONALIT|SEX|FATHER|MOTHER|SPOUSE|DATE|PLACE OF BIRTH|FILE NO|OLD|PREVIOUS|PIN|ADDRESS|RESIDENCE)/i.test(nxtUp)) break;
-                    if (/\b\d{6}\b/.test(nxtUp) || /\b\d{5,6}(-\d{4})?\b/.test(nxtUp)) break;
+                    if (/(PASSPORT|DOB|ISSUE|EXPIR|NATIONALIT|SEX|FATHER|MOTHER|SPOUSE|PLACE\s*OF\s*BIRTH|FILE\s*NO|OLD\s*PASSPORT)/i.test(nxtUp)) break;
                     if (nxt.trim().length < 3) continue;
                     currentAddrLines.push(nxt.trim());
+                    // If this line contains PIN code or country, it marks the end of the address
+                    if (/\b(?:PIN\s*:?\s*)?\d{6}\b/.test(nxtUp) || /INDIA\b/.test(nxtUp)) {
+                        break;
+                    }
                 }
                 if (currentAddrLines.length > 0) {
                     const rawAddr = currentAddrLines.join(', ');
@@ -70,24 +74,26 @@ function extractVisualFields(result, text) {
             if (!extraFields.placeOfBirth && /(?:PLACE|PACO|PICO)\s*OF\s*BIRTH|LIEU\s*DE\s*NAISSANCE|LISU\s*D[EÉ]\s*NAISS/i.test(up)) {
                 let val = up.replace(/.*(?:PLACE|PACO|PICO)\s*OF\s*BIRTH[^\w]*/i, '')
                             .replace(/(?:LIEU|LISU)\s*D[EÉ]?\s*NAISS\w*[^\w]*.*/i, '')
-                            .replace(/[^A-Z\s]/g, '').trim();
+                            .replace(/[^A-Z\s,]/g, '').trim();
                 if (val.length < 3 || /^(CEE|SH|NAISS\w*|LISU|LIEU)$/i.test(val)) val = '';
                 if (val.length >= 3) {
-                    extraFields.placeOfBirth = val;
+                    extraFields.placeOfBirth = val.replace(/\s{2,}/g, ' ').trim();
                 } else {
                     const nxt = (lines[i + 1] || '').toUpperCase();
-                    const words = nxt.replace(/[^A-Z\s]/g, ' ').split(/\s+/).filter(w => w.length >= 3 && !/(?:DATE|ISSUE|SEX|BIRTH|NAISS|PACO|PICO|LIEU|LISU)/i.test(w));
+                    const words = nxt.replace(/[^A-Z\s,]/g, ' ').split(/\s+/).filter(w => w.length >= 3 && !/(?:DATE|ISSUE|SEX|BIRTH|NAISS|PACO|PICO|LIEU|LISU)/i.test(w));
                     if (words.length > 0) {
-                        extraFields.placeOfBirth = (words[1] && words[1].length >= 3) ? `${words[0]} ${words[1]}` : words[0];
+                        extraFields.placeOfBirth = words.slice(0, 4).join(' ');
                     }
                 }
             }
             // Father name (also detect garbled OCR: "Mam of Fa", "Name of Father", "Fo' a", "Fath",
             // "Kas of Ft", "PRT 1 Kas of Ft", "Geir sa ULL", "Name of Fat" etc.)
+            const FATHER_LABEL_GARBAGE = /^(?:LEGAL\s*GUARDIAN|LEGAL|GUARDIAN|NAME|FA|FT|FATH|OF|FATHER|NOM)$/i;
             if (!extraFields.fatherName && /(FATHER|FATH[A-Z]*\s*(?:NAME)?|MAM\s*OF\s*FA|FO.?\s*A|KAS\s*OF\s*FT|GEIR\s*SA|NIVE\s*OF\s*FA|NAME\s*OF\s*FAT)/i.test(up)) {
-                const m = up.match(/(?:FATHER|FATH[A-Z]*)(?:\s*NAME)?\s*[:]?\s*(.*)/i);
-                const captured = m && m[1] ? m[1].replace(/[^A-Z\s]/gi, '').trim() : '';
-                if (captured.length >= 5 && captured.replace(/\s/g, '').length >= 4) {
+                const m = up.match(/(?:FATHER|FATH[A-Z]*)(?:\s*(?:NAME|\/\s*LEGAL\s*GUARDIAN))?\s*[:]?\s*(.*)/i);
+                let captured = m && m[1] ? m[1].replace(/[^A-Z\s]/gi, '').trim() : '';
+                captured = captured.replace(/^(?:LEGAL\s*GUARDIAN|GUARDIAN)\b/i, '').trim();
+                if (captured.length >= 5 && captured.replace(/\s/g, '').length >= 4 && !FATHER_LABEL_GARBAGE.test(captured)) {
                     extraFields.fatherName = captured;
                 } else {
                     for (let j = 1; j <= 2; j++) {
@@ -96,7 +102,7 @@ function extractVisualFields(result, text) {
                         const cleaned = nxt.replace(/[^A-Z\s]/gi, '').trim();
                         // Make sure there is at least one word of length >= 4 to avoid garbage
                         const hasRealWord = cleaned.split(/\s+/).some(w => w.length >= 4);
-                        if (cleaned.length >= 5 && hasRealWord) {
+                        if (cleaned.length >= 5 && hasRealWord && !FATHER_LABEL_GARBAGE.test(cleaned)) {
                             extraFields.fatherName = cleaned;
                             break;
                         }
@@ -164,10 +170,15 @@ function extractVisualFields(result, text) {
                 }
             }
             // Old passport number (allow Pasion, or garbled "TRE St", "id sors", "Face se ERE" for "Old Passport No. with Date and Place of Issue")
-            if (!extraFields.oldPassportNo && /(OLD|PREVIOUS|PASION|TRE\s*ST|ID\s*SORS|FACE\s*SE)\s*(PASSPORT|MO|NO|WITH|ITH)?/i.test(up)) {
-                const m = up.match(/(?:OLD|PREVIOUS|PASION|TRE\s*ST|ID\s*SORS|FACE\s*SE)\s*(?:PASSPORT|MO|NO|WITH|ITH)?\s*[:]?\s*([A-Z0-9]{6,14})/i);
-                if (m && m[1]) extraFields.oldPassportNo = correctIndianPassportNumber(m[1].trim());
-                else { const nxt = (nextLine(i).match(/[A-Z0-9]{6,14}/) || [])[0]; if (nxt) extraFields.oldPassportNo = correctIndianPassportNumber(nxt); }
+            if (!extraFields.oldPassportNo && /(?:OLD|PREVIOUS|PASION|TRE\s*ST|ID\s*SORS|FACE\s*SE)\s*(?:PASSPORT|MO|NO|WITH|ITH)?/i.test(up)) {
+                const cleanUp = up.replace(/(?:OLD|PREVIOUS|PASION|TRE\s*ST|ID\s*SORS|FACE\s*SE)\s*(?:PASSPORT|MO|NO|WITH|ITH)?\s*(?:DATE|AND|PLACE|OF|ISSUE)*/gi, '').trim();
+                const inlineTokens = cleanUp.split(/[^A-Z0-9]+/).filter(t => t.length >= 7 && t.length <= 10 && /\d{4,}/.test(t) && !/PASSPORT/i.test(t));
+                if (inlineTokens.length > 0) {
+                    extraFields.oldPassportNo = correctIndianPassportNumber(inlineTokens[0]);
+                } else {
+                    const nxtTokens = nextLine(i).split(/[^A-Z0-9]+/).filter(t => t.length >= 7 && t.length <= 10 && /\d{4,}/.test(t) && !/PASSPORT/i.test(t));
+                    if (nxtTokens.length > 0) extraFields.oldPassportNo = correctIndianPassportNumber(nxtTokens[0]);
+                }
             }
             // Place of issue
             if (!extraFields.placeOfIssue && /(?:PLACE|PLACOO?T?)\s*OF\s*ISSUE|LIEU\s*DE\s*D[EÉ]LIVRANCE|LICU\s*DE\s*DIIVRANCE/i.test(up)) {
@@ -186,9 +197,9 @@ function extractVisualFields(result, text) {
             }
             // File number
             if (!extraFields.fileNo && /(FILE|DOCUMENT)\s*NO\.?/i.test(up)) {
-                const m = up.match(/(?:FILE|DOCUMENT)\s*NO\.?\s*[:]?\s*([A-Z0-9]{3,15})/i);
+                const m = up.match(/(?:FILE|DOCUMENT)\s*NO\.?\s*[:]?\s*([A-Z0-9]{3,16})/i);
                 if (m && m[1]) extraFields.fileNo = m[1].trim();
-                else { const nxt = (nextLine(i).match(/[A-Z0-9]{3,15}/) || [])[0]; if (nxt) extraFields.fileNo = nxt; }
+                else { const nxt = (nextLine(i).match(/[A-Z0-9]{3,16}/) || [])[0]; if (nxt) extraFields.fileNo = nxt; }
             }
             // -----------------------------------------------------------------------------
         if (!visualSurname && /(?:SURNAME|FAMILY\s*NAME|APELLIDOS|SURMAME|SURIREME|NOM\b|NOMS\b)/i.test(up)) {
@@ -265,6 +276,11 @@ function extractVisualFields(result, text) {
                 }
             }
         }
+    }
+
+    if (!extraFields.fileNo) {
+        const fm = text.match(/\b([A-Z]{2}[0-9]{13})\b/);
+        if (fm) extraFields.fileNo = fm[1];
     }
 
     return { lines, visualSurname, visualGivenNames, extraFields };

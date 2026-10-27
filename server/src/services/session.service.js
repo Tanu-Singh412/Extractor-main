@@ -1,7 +1,38 @@
 const { createHash, randomBytes } = require('node:crypto');
+const fs = require('node:fs');
+const path = require('node:path');
 const { COOKIE_NAME, SESSION_TTL_MS } = require('../config/auth.config');
+const { DATA_DIR } = require('../config/paths');
 
-const sessions = new Map();
+const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');
+
+function loadPersistedSessions() {
+    try {
+        if (fs.existsSync(SESSIONS_FILE)) {
+            const data = JSON.parse(fs.readFileSync(SESSIONS_FILE, 'utf8'));
+            const map = new Map();
+            const now = Date.now();
+            if (Array.isArray(data)) {
+                for (const [key, session] of data) {
+                    if (session && session.expiresAt > now) {
+                        map.set(key, session);
+                    }
+                }
+            }
+            return map;
+        }
+    } catch (_) {}
+    return new Map();
+}
+
+function savePersistedSessions(sessionsMap) {
+    try {
+        if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+        fs.writeFileSync(SESSIONS_FILE, JSON.stringify([...sessionsMap.entries()]));
+    } catch (_) {}
+}
+
+const sessions = loadPersistedSessions();
 const digest = token => createHash('sha256').update(token).digest('hex');
 
 function requestToken(req) {
@@ -13,7 +44,14 @@ function requestToken(req) {
 
 function prune() {
     const now = Date.now();
-    for (const [key, session] of sessions) if (session.expiresAt <= now) sessions.delete(key);
+    let changed = false;
+    for (const [key, session] of sessions) {
+        if (session.expiresAt <= now) {
+            sessions.delete(key);
+            changed = true;
+        }
+    }
+    if (changed) savePersistedSessions(sessions);
 }
 
 function createSession(admin) {
@@ -22,6 +60,7 @@ function createSession(admin) {
     for (const [key, session] of sessions) if (session.adminId === admin.id) sessions.delete(key);
     const token = randomBytes(32).toString('hex');
     sessions.set(digest(token), { adminId: admin.id, expiresAt: Date.now() + SESSION_TTL_MS });
+    savePersistedSessions(sessions);
     return token;
 }
 
@@ -33,6 +72,7 @@ function getSession(req) {
     if (!session) return null;
     if (session.expiresAt <= Date.now()) {
         sessions.delete(key);
+        savePersistedSessions(sessions);
         return null;
     }
     return session;
@@ -40,7 +80,10 @@ function getSession(req) {
 
 function deleteSession(req) {
     const token = requestToken(req);
-    if (token) sessions.delete(digest(token));
+    if (token) {
+        sessions.delete(digest(token));
+        savePersistedSessions(sessions);
+    }
 }
 
 module.exports = { createSession, getSession, deleteSession };

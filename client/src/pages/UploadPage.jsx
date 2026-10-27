@@ -3,6 +3,7 @@ import FileUploadZone from "../components/upload/FileUploadZone";
 import DocumentPreview from "../components/upload/DocumentPreview";
 import OcrProgressBar from "../components/upload/OcrProgressBar";
 import VerificationForm from "../components/upload/VerificationForm";
+import ConfirmSaveModal from "../components/upload/ConfirmSaveModal";
 
 import * as api from "../services/api";
 import { generateMockPassport } from "../utils/mockGenerator";
@@ -19,6 +20,7 @@ import { applyProperNameHandling } from "../utils/names";
 
 export default function UploadPage({
   editingRecord,
+  existingRecords = [],
   onClearEdit,
   onRecordSaved,
   addToast
@@ -33,9 +35,31 @@ export default function UploadPage({
   const [formState, setFormState] = useState(EMPTY_FORM);
   const [editId, setEditId] = useState(null);
   const [formErrors, setFormErrors] = useState({});
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const fileInputRef = useRef(null);
   const intervalRef = useRef(null);
+  const trackedBlobUrlsRef = useRef([]);
+
+  const createTrackedBlobUrl = (file) => {
+    try {
+      const url = URL.createObjectURL(file);
+      trackedBlobUrlsRef.current.push(url);
+      return url;
+    } catch {
+      return "";
+    }
+  };
+
+  const revokeTrackedBlobUrls = () => {
+    trackedBlobUrlsRef.current.forEach((url) => {
+      try {
+        URL.revokeObjectURL(url);
+      } catch {}
+    });
+    trackedBlobUrlsRef.current = [];
+  };
 
   // Sync incoming record to edit
   const [prevEditingRecordId, setPrevEditingRecordId] = useState(editingRecord?.id || null);
@@ -70,6 +94,7 @@ export default function UploadPage({
   useEffect(() => {
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
+      revokeTrackedBlobUrls();
     };
   }, []);
 
@@ -100,12 +125,14 @@ export default function UploadPage({
   };
 
   const handleClearForm = () => {
+    revokeTrackedBlobUrls();
     setFormState({ ...EMPTY_FORM, docType: documentType });
     setEditId(null);
     setPreviewImage("");
     setMultiPreviews([]);
     setShowOcrProgress(false);
     setFormErrors({});
+    setShowConfirmModal(false);
     if (fileInputRef.current) fileInputRef.current.value = "";
     if (onClearEdit) onClearEdit();
   };
@@ -117,7 +144,8 @@ export default function UploadPage({
     setIsScanning(true);
     setShowOcrProgress(true);
     setOcrProgressPercent(15);
-    setOcrProgressText(files.length > 1 ? `Uploading ${files.length} passport pages...` : "Uploading document...");
+    const docLabel = documentType === "INSURANCE" ? "insurance" : "passport";
+    setOcrProgressText(files.length > 1 ? `Uploading ${files.length} ${docLabel} pages...` : "Uploading document...");
 
     try {
       if (intervalRef.current) clearInterval(intervalRef.current);
@@ -177,7 +205,16 @@ export default function UploadPage({
         });
 
         if (resData.previewUrl || resData.imageUrl) {
-          setPreviewImage(resData.previewUrl || resData.imageUrl);
+          const sUrl = resData.previewUrl || resData.imageUrl;
+          setPreviewImage((prev) => {
+            if (prev && prev.startsWith("__PDF__:") && prev.includes(":::blob:")) {
+              return prev;
+            }
+            if (sUrl.toLowerCase().includes(".pdf")) {
+              return `__PDF__:${resData.fileName || "document.pdf"}:::${sUrl}`;
+            }
+            return sUrl;
+          });
         }
 
         const label = detectedDocType === "INSURANCE" ? "Insurance" : "Passport";
@@ -198,12 +235,14 @@ export default function UploadPage({
 
   const processUploadedFiles = (files) => {
     if (!files?.length) return;
+    revokeTrackedBlobUrls();
     if (files.length === 1) {
       setMultiPreviews([]);
       const file = files[0];
       const isPdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name);
       if (isPdf) {
-        setPreviewImage("__PDF__:" + file.name);
+        const blobUrl = createTrackedBlobUrl(file);
+        setPreviewImage(blobUrl ? `__PDF__:${file.name}:::${blobUrl}` : `__PDF__:${file.name}`);
       } else if (!NON_PREVIEWABLE.test(file.name) && file.type.startsWith("image/")) {
         const reader = new FileReader();
         reader.onload = e => setPreviewImage(e.target.result);
@@ -220,7 +259,8 @@ export default function UploadPage({
       files.forEach((file, idx) => {
         const isPdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name);
         if (isPdf) {
-          thumbs[idx] = "__PDF__:" + file.name;
+          const blobUrl = createTrackedBlobUrl(file);
+          thumbs[idx] = blobUrl ? `__PDF__:${file.name}:::${blobUrl}` : `__PDF__:${file.name}`;
           setMultiPreviews([...thumbs]);
         } else if (!NON_PREVIEWABLE.test(file.name) && file.type.startsWith("image/")) {
           const reader = new FileReader();
@@ -239,10 +279,10 @@ export default function UploadPage({
     runOCRPipeline(files);
   };
 
-  const handleFormSubmit = async (e) => {
+  const handleFormSubmit = (e) => {
     e.preventDefault();
 
-    const { valid, errors, fieldErrors } = validateDocumentForm(formState);
+    const { valid, errors, fieldErrors } = validateDocumentForm(formState, existingRecords, editId);
     if (!valid) {
       setFormErrors(fieldErrors || {});
       addToast(errors[0] || "Please correct the errors in the form.", "error");
@@ -253,7 +293,11 @@ export default function UploadPage({
     }
 
     setFormErrors({});
+    setShowConfirmModal(true);
+  };
 
+  const handleConfirmSave = async () => {
+    setIsSaving(true);
     // The image was only used for parsing data; do not save the actual image in the database
     const { previewImage: _unusedPi, ...recordPayload } = formState;
 
@@ -266,10 +310,20 @@ export default function UploadPage({
         addToast("Record saved successfully!", "success");
       }
       if (onRecordSaved) await onRecordSaved();
+      setShowConfirmModal(false);
       handleClearForm();
     } catch (err) {
       console.error("Save error:", err);
-      addToast(err.message || "Failed to save record.", "error");
+      const msg = err.message || "Failed to save record.";
+      if (msg.toLowerCase().includes("passport number")) {
+        setFormErrors(prev => ({ ...prev, passportNo: msg }));
+      } else if (msg.toLowerCase().includes("policy number")) {
+        setFormErrors(prev => ({ ...prev, policyNo: msg }));
+      }
+      addToast(msg, "error");
+      setShowConfirmModal(false);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -329,6 +383,7 @@ export default function UploadPage({
                 onFilesSelected={processUploadedFiles}
                 fileInputRef={fileInputRef}
                 onError={(msg) => addToast(msg, "error")}
+                documentType={documentType}
               />
             )}
 
@@ -345,16 +400,29 @@ export default function UploadPage({
               progressText={ocrProgressText}
             />
 
-            <div className="demo-trigger-wrapper">
-              <button
-                type="button"
-                className="demo-trigger-btn"
-                onClick={handleTryDemo}
-              >
-                <i className="fa-regular fa-file-lines" aria-hidden="true"></i> Try a sample passport
-              </button>
+            {documentType === "PASSPORT" && (
+              <div className="demo-trigger-wrapper">
+                <button
+                  type="button"
+                  className="demo-trigger-btn"
+                  onClick={handleTryDemo}
+                >
+                  <i className="fa-regular fa-file-lines" aria-hidden="true"></i> Try a sample passport
+                </button>
+              </div>
+            )}
+            <div className="upload-guidance">
+              <h4>A better scan, fewer corrections.</h4>
+              {documentType === "INSURANCE" ? (
+                <p>
+                  Upload your <strong>insurance policy pages</strong> together for best results — policy schedule, insured member details, and coverage info. Keep all four corners visible and text clear.
+                </p>
+              ) : (
+                <p>
+                  Upload <strong>both passport pages</strong> together for best results — Page 1 (photo + MRZ) and Page 2 (father, mother, spouse, address). Keep all four corners visible and avoid glare.
+                </p>
+              )}
             </div>
-            <div className="upload-guidance"><h4>A better scan, fewer corrections.</h4><p>Upload <strong>both passport pages</strong> together for best results — Page 1 (photo + MRZ) and Page 2 (father, mother, spouse, address). Keep all four corners visible and avoid glare.</p></div>
           </div>
 
           <VerificationForm
@@ -362,12 +430,21 @@ export default function UploadPage({
             handleInputChange={handleInputChange}
             handleFormSubmit={handleFormSubmit}
             handleClearForm={handleClearForm}
-            isScanning={isScanning}
+            isScanning={isScanning || isSaving}
             editId={editId}
             formErrors={formErrors}
           />
         </div>
       </div>
+
+      <ConfirmSaveModal
+        isOpen={showConfirmModal}
+        formState={formState}
+        isSaving={isSaving}
+        editId={editId}
+        onCancel={() => setShowConfirmModal(false)}
+        onConfirm={handleConfirmSave}
+      />
     </main>
   );
 }

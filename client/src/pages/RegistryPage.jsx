@@ -3,6 +3,7 @@ import RegistryToolbar from "../components/registry/RegistryToolbar";
 import RegistryTable from "../components/registry/RegistryTable";
 import RecordDetailModal from "../components/registry/RecordDetailModal";
 import SideDrawer from "../components/registry/SideDrawer";
+import ConfirmDeleteModal from "../components/common/ConfirmDeleteModal";
 
 const ITEMS_PER_PAGE = 10;
 
@@ -28,6 +29,8 @@ export default function RegistryPage({
 }) {
   const [currentPage, setCurrentPage] = useState(1);
   const [activeModalRecord, setActiveModalRecord] = useState(null);
+  const [recordToDelete, setRecordToDelete] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const [prevFilters, setPrevFilters] = useState({ searchQuery, filterMode, registryDocType, expiryWindowDays });
   if (
@@ -99,10 +102,31 @@ export default function RegistryPage({
     return filteredPassports.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
   }, [filteredPassports, currentPage]);
 
-  const handleDelete = async (id) => {
-    const success = await onDeleteRecord(id);
-    if (success && activeModalRecord?.id === id) {
-      setActiveModalRecord(null);
+  const handleRequestDelete = (target) => {
+    if (!target) return;
+    const record = typeof target === "object" ? target : passports.find((p) => p.id === target) || { id: target };
+    setRecordToDelete(record);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!recordToDelete) return;
+    setIsDeleting(true);
+    try {
+      const success = await onDeleteRecord(recordToDelete.id);
+      if (success) {
+        if (activeModalRecord?.id === recordToDelete.id) {
+          setActiveModalRecord(null);
+        }
+        setRecordToDelete(null);
+      }
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleCancelDelete = () => {
+    if (!isDeleting) {
+      setRecordToDelete(null);
     }
   };
 
@@ -112,6 +136,40 @@ export default function RegistryPage({
     }
     if (onEditRecord) {
       onEditRecord(record);
+    }
+  };
+
+  const getExportLabel = (format) => {
+    let typeText = "Records";
+    if (registryDocType === "PASSPORT") typeText = "Passports";
+    else if (registryDocType === "INSURANCE") typeText = "Insurance";
+
+    let statusText = "";
+    if (filterMode === "EXPIRED") statusText = "Expired ";
+    else if (filterMode === "EXPIRING_SOON") statusText = `Expiring (${expiryWindowDays}d) `;
+    else if (filterMode === "VALID") statusText = "Valid ";
+
+    return `Export ${statusText}${typeText} (${format.toUpperCase()})`;
+  };
+
+  const getExportTitle = (format) => {
+    const typeText = registryDocType === "ALL" ? "all" : registryDocType.toLowerCase();
+    const statusText = filterMode === "ALL" ? "" : ` (${filterMode.replace("_", " ").toLowerCase()})`;
+    return `Export ${typeText}${statusText} records as ${format.toUpperCase()} (${filteredPassports.length} items)`;
+  };
+
+  const handleExport = (format) => {
+    const options = {
+      docType: registryDocType,
+      filterMode,
+      expiryWindowDays,
+      searchQuery,
+      count: filteredPassports.length
+    };
+    if (format === "csv" && onExportCSV) {
+      onExportCSV(options);
+    } else if (format === "json" && onExportJSON) {
+      onExportJSON(options);
     }
   };
 
@@ -140,16 +198,18 @@ export default function RegistryPage({
             <button
               type="button"
               className="btn-action"
-              onClick={onExportCSV}
+              onClick={() => handleExport("csv")}
+              title={getExportTitle("CSV")}
             >
-              <i className="fa-solid fa-file-csv"></i> Export CSV
+              <i className="fa-solid fa-file-csv"></i> {getExportLabel("CSV")}
             </button>
             <button
               type="button"
               className="btn-action"
-              onClick={onExportJSON}
+              onClick={() => handleExport("json")}
+              title={getExportTitle("JSON")}
             >
-              <i className="fa-solid fa-file-code"></i> Export JSON
+              <i className="fa-solid fa-file-code"></i> {getExportLabel("JSON")}
             </button>
           </div>
         </div>
@@ -173,7 +233,7 @@ export default function RegistryPage({
           registryDocType={registryDocType}
           onViewRecord={setActiveModalRecord}
           onEditRecord={handleEdit}
-          onDeleteRecord={handleDelete}
+          onDeleteRecord={handleRequestDelete}
           currentPage={currentPage}
           totalPages={totalPages}
           onPageChange={setCurrentPage}
@@ -186,9 +246,17 @@ export default function RegistryPage({
           record={activeModalRecord}
           onClose={() => setActiveModalRecord(null)}
           onEdit={handleEdit}
-          onDelete={handleDelete}
+          onDelete={handleRequestDelete}
         />
       )}
+
+      <ConfirmDeleteModal
+        isOpen={Boolean(recordToDelete)}
+        record={recordToDelete}
+        isDeleting={isDeleting}
+        onCancel={handleCancelDelete}
+        onConfirm={handleConfirmDelete}
+      />
 
       <SideDrawer
         isOpen={isSidebarOpen}

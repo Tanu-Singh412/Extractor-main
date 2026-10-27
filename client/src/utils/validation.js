@@ -58,7 +58,7 @@ export function validateUploadFiles(files) {
 /**
  * Validates Passport form fields.
  */
-export function validatePassportForm(formState) {
+export function validatePassportForm(formState, existingRecords = [], currentId = null) {
   const errors = [];
   const fieldErrors = {};
 
@@ -88,10 +88,22 @@ export function validatePassportForm(formState) {
     }
   });
 
-  // Passport Number format (6–9 alphanumeric characters)
+  // Passport Number format (6–9 alphanumeric characters) and uniqueness
   const pno = (formState.passportNo || "").trim();
-  if (pno && !/^[A-Z0-9]{6,9}$/i.test(pno)) {
-    addError("passportNo", "Passport Number must be 6–9 alphanumeric characters (e.g. A12345678)");
+  if (pno) {
+    if (!/^[A-Z0-9]{6,9}$/i.test(pno)) {
+      addError("passportNo", "Passport Number must be 6–9 alphanumeric characters (e.g. A12345678)");
+    } else if (Array.isArray(existingRecords)) {
+      const normalized = pno.toUpperCase();
+      const duplicate = existingRecords.find(r =>
+        r.id !== currentId &&
+        r.passportNo &&
+        String(r.passportNo).trim().toUpperCase() === normalized
+      );
+      if (duplicate) {
+        addError("passportNo", `Passport Number "${normalized}" is already registered to another document.`);
+      }
+    }
   }
 
   // Issuing Country (ISO 3166-1 alpha-3 code: exactly 3 letters)
@@ -192,13 +204,27 @@ export function validatePassportForm(formState) {
     }
   });
 
+  // Contact fields (if provided)
+  const email = (formState.email || "").trim();
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    addError("email", "Please enter a valid email address (e.g. user@example.com)");
+  }
+
+  const phone = (formState.phone || "").trim();
+  if (phone) {
+    const digitsOnly = phone.replace(/\D/g, "");
+    if (digitsOnly.length < 7 || digitsOnly.length > 15) {
+      addError("phone", "Phone number must be between 7 and 15 digits");
+    }
+  }
+
   return { valid: errors.length === 0, errors, fieldErrors };
 }
 
 /**
  * Validates Insurance form fields.
  */
-export function validateInsuranceForm(formState) {
+export function validateInsuranceForm(formState, existingRecords = [], currentId = null) {
   const errors = [];
   const fieldErrors = {};
 
@@ -222,13 +248,23 @@ export function validateInsuranceForm(formState) {
     }
   });
 
-  // Policy number format
+  // Policy number format and uniqueness
   const pno = (formState.policyNo || "").trim();
   if (pno) {
     if (pno.length < 4 || pno.length > 35) {
       addError("policyNo", "Policy Number must be between 4 and 35 characters");
     } else if (!/^[A-Za-z0-9\-/_.\s]+$/.test(pno)) {
       addError("policyNo", "Policy Number contains invalid special characters");
+    } else if (Array.isArray(existingRecords)) {
+      const normalized = pno.toUpperCase();
+      const duplicate = existingRecords.find(r =>
+        r.id !== currentId &&
+        r.policyNo &&
+        String(r.policyNo).trim().toUpperCase() === normalized
+      );
+      if (duplicate) {
+        addError("policyNo", `Policy Number "${pno}" is already registered to another document.`);
+      }
     }
   }
 
@@ -323,9 +359,9 @@ export function validateInsuranceForm(formState) {
 /**
  * Validates any supported document form (Passport or Insurance).
  */
-export function validateDocumentForm(formState) {
+export function validateDocumentForm(formState, existingRecords = [], currentId = null) {
   if (formState?.docType === "INSURANCE") {
-    return validateInsuranceForm(formState);
+    return validateInsuranceForm(formState, existingRecords, currentId);
   }
-  return validatePassportForm(formState || {});
+  return validatePassportForm(formState || {}, existingRecords, currentId);
 }

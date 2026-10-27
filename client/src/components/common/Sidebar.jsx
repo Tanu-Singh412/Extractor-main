@@ -1,5 +1,7 @@
-import React, { useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Brand from "./Brand";
+import ProfileDropdown from "./ProfileDropdown";
+import ChangePasswordModal from "./ChangePasswordModal";
 
 export default function Sidebar({
   activeTab,
@@ -21,8 +23,10 @@ export default function Sidebar({
   const route = currentRoute || activeTab || "UPLOAD";
   const navigate = onNavigate || setActiveTab;
   const sidebarRef = useRef(null);
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
 
   useEffect(() => {
+
     if (!mobileSidebarOpen) return;
     const previousFocus = document.activeElement;
     const previousOverflow = document.body.style.overflow;
@@ -132,15 +136,12 @@ export default function Sidebar({
 
         <div className="sidebar-footer">
           {currentUser && (
-            <div className="sidebar-user-card">
-              <div className="sidebar-avatar-circle">
-                {currentUser.username ? currentUser.username.slice(0, 2).toUpperCase() : "AD"}
-              </div>
-              <div className="sidebar-user-meta">
-                <span className="sidebar-user-name">{currentUser.username}</span>
-                <span className="sidebar-user-role">Administrator</span>
-              </div>
-            </div>
+            <ProfileDropdown
+              currentUser={currentUser}
+              onLogout={onLogout}
+              onChangePasswordClick={() => setIsPasswordModalOpen(true)}
+              showSignOut={false}
+            />
           )}
           <button
             className="sidebar-logout-btn"
@@ -152,6 +153,11 @@ export default function Sidebar({
           </button>
         </div>
       </aside>
+
+      <ChangePasswordModal
+        isOpen={isPasswordModalOpen}
+        onClose={() => setIsPasswordModalOpen(false)}
+      />
     </>
   );
 }

@@ -51,4 +51,21 @@ async function ensureDefaultAdmin() {
     return null;
 }
 
-module.exports = { findByUsername, findById, createAdmin, countAdmins, ensureDefaultAdmin };
+function updatePassword(id, newPasswordHash) {
+    const admins = readAdmins();
+    const admin = admins.find(a => a.id === id);
+    if (!admin) throw new Error('Admin not found');
+    admin.passwordHash = newPasswordHash;
+    admin.updatedAt = new Date().toISOString();
+    fs.mkdirSync(path.dirname(ADMINS_FILE), { recursive: true });
+    const temporary = `${ADMINS_FILE}.${randomUUID()}.tmp`;
+    try {
+        fs.writeFileSync(temporary, JSON.stringify(admins, null, 2) + '\n', { mode: 0o600, flag: 'wx' });
+        fs.renameSync(temporary, ADMINS_FILE);
+    } finally {
+        if (fs.existsSync(temporary)) fs.unlinkSync(temporary);
+    }
+    return true;
+}
+
+module.exports = { findByUsername, findById, createAdmin, countAdmins, ensureDefaultAdmin, updatePassword };

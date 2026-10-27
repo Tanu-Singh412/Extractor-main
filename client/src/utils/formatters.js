@@ -1,5 +1,17 @@
+export const isPdfSource = (url, fileName = "") => {
+  if (!url && !fileName) return false;
+  const s = String(url || "").toLowerCase();
+  const f = String(fileName || "").toLowerCase();
+  return (
+    s.startsWith("__pdf__:") ||
+    s.startsWith("data:application/pdf") ||
+    s.includes(".pdf") ||
+    f.endsWith(".pdf")
+  );
+};
+
 export const isPreviewable = url =>
-  typeof url === "string" && url.trim().length > 10 && !url.startsWith("__");
+  typeof url === "string" && url.trim().length > 5 && (!url.startsWith("__") || url.startsWith("__PDF__:"));
 
 export const getFilterLabel = mode =>
   ({ ALL: "All Records", VALID: "Valid Documents", EXPIRING_SOON: "Expiring Soon", EXPIRED: "Expired" }[mode] || "Records");

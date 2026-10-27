@@ -431,9 +431,9 @@ export default function RegistryTable({
             type="button"
             className="dropdown-item text-danger"
             onClick={() => {
-              const id = openMenu.item.id;
+              const item = openMenu.item;
               setOpenMenu(null);
-              onDeleteRecord(id);
+              onDeleteRecord(item);
             }}
           >
             <i className="fa-solid fa-trash" style={{ color: "#e11d48", width: "16px" }}></i>

@@ -17,11 +17,17 @@ export function useAuth() {
         if (data.success && data.admin) {
           setIsAuthenticated(true);
           setCurrentUser(data.admin);
-        } else if (localStorage.getItem("isAuthenticated") !== "true") {
+        } else {
           setIsAuthenticated(false);
+          setCurrentUser(null);
+          localStorage.removeItem("isAuthenticated");
         }
       })
-      .catch(() => {});
+      .catch(() => {
+        setIsAuthenticated(false);
+        setCurrentUser(null);
+        localStorage.removeItem("isAuthenticated");
+      });
   }, []);
 
   const loginUser = (admin) => {

@@ -37,4 +37,30 @@ function logout(req, res) {
     res.json({ success: true });
 }
 
-module.exports = { login, currentAdmin, logout };
+async function changePassword(req, res) {
+    res.setHeader('Cache-Control', 'no-store');
+    const { currentPassword, newPassword } = req.body || {};
+    if (!currentPassword || !newPassword) {
+        return res.status(400).json({ success: false, message: 'Please provide both current and new password.' });
+    }
+    if (typeof newPassword !== 'string' || newPassword.length < 6) {
+        return res.status(400).json({ success: false, message: 'New password must be at least 6 characters.' });
+    }
+    try {
+        const admin = admins.findById(req.admin.id);
+        if (!admin) return res.status(404).json({ success: false, message: 'Admin account not found.' });
+        const valid = await verifyPassword(currentPassword, admin.passwordHash);
+        if (!valid) {
+            return res.status(400).json({ success: false, message: 'Current password is incorrect.' });
+        }
+        const { hashPassword } = require('../services/password.service');
+        const newHash = await hashPassword(newPassword);
+        admins.updatePassword(admin.id, newHash);
+        res.json({ success: true, message: 'Password updated successfully.' });
+    } catch (err) {
+        console.error('[AUTH] Change password failed:', err.message);
+        res.status(500).json({ success: false, message: 'Failed to update password.' });
+    }
+}
+
+module.exports = { login, currentAdmin, logout, changePassword };

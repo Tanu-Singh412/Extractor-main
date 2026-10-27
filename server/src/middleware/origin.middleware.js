@@ -1,7 +1,9 @@
-const { CLIENT_ORIGINS } = require('../config/auth.config');
+const { CLIENT_ORIGINS, isOriginAllowed } = require('../config/auth.config');
 
 function allowedOrigin(req, origin) {
-    return !origin || CLIENT_ORIGINS.includes(origin) || origin === `${req.protocol}://${req.get('host')}`;
+    if (!origin) return true;
+    if (origin === `${req.protocol}://${req.get('host')}`) return true;
+    return isOriginAllowed ? isOriginAllowed(origin) : CLIENT_ORIGINS.includes(origin);
 }
 
 function requireTrustedOrigin(req, res, next) {

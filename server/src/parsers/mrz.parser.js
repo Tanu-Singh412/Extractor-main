@@ -35,8 +35,10 @@ function mrzDate6(raw, kind) {
 }
 
 function cleanMrzLine(raw) {
-    return String(raw).toUpperCase().replace(/«/g, '<').replace(/\s+/g, '').replace(/[^A-Z0-9<]/g, '');
+    return String(raw).toUpperCase().replace(/[«‹]/g, '<').replace(/\s+/g, '').replace(/[^A-Z0-9<]/g, '');
 }
+
+
 
 /* Check-digit sliding score — OCR char shift handle karta hai */
 function td3Score(w) {
@@ -96,11 +98,17 @@ function extractPassportNo(w) {
 
 /* Line-1 parse — strict anchors: 'P<', '<CCC', ya country code se start */
 function parseLine1(raw, expectCountry) {
-    let l = String(raw).toUpperCase().replace(/[«\[\]]/g, '<').replace(/\s+/g, '').replace(/[^A-Z0-9<]/g, '');
+    let l = String(raw).toUpperCase().replace(/[«‹\[\]]/g, '<').replace(/\s+/g, '').replace(/[^A-Z0-9<]/g, '');
     if (!l) return null;
 
     // Normalise OCR chevron misreads: K<, <K, KK, <C, C<
     l = l.replace(/(?:K<|<K|KK|K{2,}|<C|C<)/g, '<<');
+
+    // Strip leading noise if P< appears slightly shifted
+    const pShift = l.indexOf('P<');
+    if (pShift > 0 && pShift <= 6) {
+        l = l.slice(pShift);
+    }
 
     if (!l.includes('<<')) {
         l = l.replace(/(.)\1{2,}/g, (m, c) => 'CLKSEIVXZ10'.includes(c) ? '<'.repeat(m.length) : m);
@@ -173,13 +181,19 @@ function extractMRZ(text) {
     const expiry = /^\d{6}$/.test(mrzDigits(w.slice(21, 27))) ? mrzDate6(w.slice(21, 27), 'expiry') : '';
     const sex = w[20] === 'M' ? 'M' : w[20] === 'F' ? 'F' : '';
 
-    // Capture surname, given names and the raw MRZ name line
+    // Search for line 1 both before and immediately after best.ei
     let surname = '', givenNames = '', issuing = '';
     let rawNameLine = '';
-    for (let j = best.ei - 1; j >= 0; j--) {
+    const candIndices = [];
+    for (let j = best.ei - 1; j >= 0; j--) candIndices.push(j);
+    for (let j = best.ei + 1; j < Math.min(entries.length, best.ei + 3); j++) candIndices.push(j);
+
+    for (const j of candIndices) {
         const candLine = entries[j].line;
         const normCand = candLine.replace(/(?:K<|<K|KK|<C|C<)/g, '<<');
-        if (!normCand.startsWith('P<') && !normCand.startsWith('P') && !normCand.includes('<<')) continue;
+        const pPos = normCand.indexOf('P<');
+        const hasPAnchor = (pPos >= 0 && pPos <= 6) || normCand.startsWith('P') || normCand.includes('<<');
+        if (!hasPAnchor) continue;
         const info = parseLine1(candLine, nationality);
         if (info) {
             surname = info.surname;

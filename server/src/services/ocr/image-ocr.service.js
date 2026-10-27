@@ -32,22 +32,40 @@ async function ocrBestRotation(filePath, currentText) {
 async function ocrMrzStrip(filePath) {
     try {
         const meta = await sharp(filePath).metadata();
-        const h = Math.max(60, Math.round((meta.height || 0) * 0.30));
-        const buf = await sharp(filePath)
-            .extract({ left: 0, top: Math.max(0, (meta.height || h) - h), width: meta.width || 1, height: h })
-            .resize({ width: 1400 }).greyscale().normalize().sharpen().png().toBuffer();
-        // Persistent worker reuse karo — naya worker banana avoid karo
-        const data = await safeOcr(buf);
-        return data.text || '';
+        const totalH = meta.height || 0;
+        const totalW = meta.width || 1;
+        if (totalH < 50) return '';
+
+        // Pass A: Bottom 30% normalized
+        const h1 = Math.max(60, Math.round(totalH * 0.30));
+        const buf1 = await sharp(filePath)
+            .extract({ left: 0, top: Math.max(0, totalH - h1), width: totalW, height: h1 })
+            .resize({ width: 1500, withoutEnlargement: false })
+            .greyscale().normalize().sharpen().png().toBuffer();
+        const data1 = await safeOcr(buf1);
+        const t1 = data1.text || '';
+        if (hasMrzText(t1)) return t1;
+
+        // Pass B: Bottom 35% with high contrast binarization for OCR-B
+        const h2 = Math.max(70, Math.round(totalH * 0.35));
+        const buf2 = await sharp(filePath)
+            .extract({ left: 0, top: Math.max(0, totalH - h2), width: totalW, height: h2 })
+            .resize({ width: 1600, withoutEnlargement: false })
+            .greyscale().linear(1.5, -30).threshold(140).png().toBuffer();
+        const data2 = await safeOcr(buf2);
+        const t2 = data2.text || '';
+        if (hasMrzText(t2)) return t2;
+
+        return t1 || t2;
     } catch (e) { console.warn('[OCR] MRZ strip failed:', e.message); return ''; }
 }
 
 async function ocrDetailPass(filePath) {
     try {
         const buf = await sharp(filePath)
-            .resize({ width: 1500, withoutEnlargement: false }) // 1800→1500
+            .resize({ width: 1600, withoutEnlargement: false })
             .greyscale()
-            .linear(1.4, -40)
+            .linear(1.35, -25)
             .sharpen({ sigma: 1.2 })
             .png()
             .toBuffer();
@@ -84,8 +102,7 @@ async function ocrImageFile(filePath, originalName, ocrScannedPdf) {
         return '';
     }
 
-
-    // Persistent worker — no logger to avoid slow path
+    // Persistent worker
     const data = await safeOcr(imageBuffer);
 
     let finalText = (data.text || '').trim();
@@ -98,12 +115,10 @@ async function ocrImageFile(filePath, originalName, ocrScannedPdf) {
 
     const passportish = /PASSPORT|PASSEPORT|PASAPORTE|REPUBLIC|KINGDOM|MRZ|BAILIWICK/i.test(finalText)
         || finalText.replace(/\s/g, '').length < 200;
-    /* ★ Insurance docs bhi detail pass ke haqdaar — chhota print hota hai */
-    const insuranceish = /INSURANCE|ASSURANCE|POLICY|PREMIUM|INSURED|COVERAGE|EFFECTIVE|BIMA|POLISY|POUCY|POLCY/i.test(finalText);
-    const needsDetail = passportish && !insuranceish;
+    const insuranceish = /INSURANCE|ASSURANCE|POLICY|PREMIUM|INSURED|COVERAGE|EFFECTIVE|BIMA|POLISY|POUCY|POLCY|PERIOD\s*OF/i.test(finalText);
 
-
-    if (passportish && !insuranceish && !hasMrzText(finalText)) {
+    // If passport MRZ is missing, run targeted strip rescue
+    if (passportish && !hasMrzText(finalText)) {
         const strip = await ocrMrzStrip(filePath);
         if (strip && hasMrzText(strip)) {
             console.log('[OCR] MRZ recovered from bottom-strip pass');
@@ -111,11 +126,23 @@ async function ocrImageFile(filePath, originalName, ocrScannedPdf) {
         }
     }
 
-    if (needsDetail) {
+    // Detail pass for passports if missing issue/expiry dates
+    if (passportish) {
         const hasIssueLabel = /ISSUE|WYDANIA|DELIV|EFFECTIVE|VALID|PERIOD|COMMENCE/i.test(finalText);
         const dateCount = (finalText.match(/\d{1,2}[\/\-. ]\s*[A-Z]{3,9}[\/\-. ]\s*\d{2,4}|\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}/g) || []).length;
         if (!hasIssueLabel || dateCount < 2) {
-            console.log('[OCR] Issue-date/dates missing — running detail (upscaled) pass');
+            console.log('[OCR] Passport issue-date/dates missing — running detail pass');
+            const detail = await ocrDetailPass(filePath);
+            if (detail) finalText = mergeNovelLines(finalText, detail);
+        }
+    }
+
+    // Detail pass for insurance documents to capture small print tables, policy numbers, dates
+    if (insuranceish) {
+        const hasPolicy = /(?:POL[I1L|!][CO0]?[YV]?|CERT(?:IFICATE)?|SCHEDULE)\s*(?:NO\.?|NUMBER|#)?\s*[:.\-]?\s*[A-Z0-9\-\/]{5,}/i.test(finalText);
+        const dateCount = (finalText.match(/\d{1,2}[\/\-. ](?:[A-Za-z]{3,9}|\d{1,2})[\/\-. ]\d{2,4}/g) || []).length;
+        if (!hasPolicy || dateCount < 2) {
+            console.log('[OCR] Insurance missing policy-no or validity dates — running detail pass');
             const detail = await ocrDetailPass(filePath);
             if (detail) finalText = mergeNovelLines(finalText, detail);
         }

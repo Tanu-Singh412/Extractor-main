@@ -1,5 +1,5 @@
 import React from "react";
-import { formatDateString, getStatus, isPreviewable } from "../../utils/formatters";
+import { formatDateString, getStatus, isPreviewable, isPdfSource } from "../../utils/formatters";
 import { getMRZLine1, getMRZLine2 } from "../../utils/mrz";
 
 export default function RecordDetailModal({
@@ -27,9 +27,11 @@ export default function RecordDetailModal({
       ["Date of Issue", record.issueDate ? formatDateString(record.issueDate) : ""],
       ["Date of Expiry", record.doe ? formatDateString(record.doe) : ""],
       ["Place of Issue", record.placeOfIssue],
+      ["Phone", record.phone],
+      ["Email", record.email],
+      ["Address", record.address],
       ["Old Passport No.", record.oldPassportNo],
       ["File No.", record.fileNo],
-      ["Address", record.address],
       ["Father's Name", record.fatherName],
       ["Mother's Name", record.motherName],
       ["Spouse Name", record.spouseName],
@@ -170,16 +172,60 @@ export default function RecordDetailModal({
 
           <div style={{ padding: "24px" }}>
             {isPreviewable(record.previewImage) && (
-              <img
-                src={record.previewImage}
-                crossOrigin="use-credentials"
-                alt="Document"
-                className="passport-preview-img"
-                style={{ marginBottom: "30px", maxWidth: "600px", border: "1px solid var(--border)" }}
-                onError={(e) => {
-                  e.currentTarget.style.display = "none";
-                }}
-              />
+              isPdfSource(record.previewImage) ? (
+                <div
+                  style={{
+                    marginBottom: "30px",
+                    width: "100%",
+                    maxWidth: "700px",
+                    borderRadius: "8px",
+                    overflow: "hidden",
+                    border: "1px solid var(--border)"
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      padding: "8px 14px",
+                      background: "var(--bg-card, #ffffff)",
+                      borderBottom: "1px solid var(--border)",
+                      fontSize: "12px",
+                      fontWeight: 600
+                    }}
+                  >
+                    <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <i className="fa-solid fa-file-pdf" style={{ color: "#dc2626" }}></i>
+                      Document PDF
+                    </span>
+                    <a
+                      href={record.previewImage.replace(/^__PDF__:[^:]*:::/, "")}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ fontSize: "11px", color: "var(--accent, #16a34a)", textDecoration: "none" }}
+                    >
+                      <i className="fa-solid fa-arrow-up-right-from-square"></i> Open in new tab
+                    </a>
+                  </div>
+                  <iframe
+                    src={`${record.previewImage.replace(/^__PDF__:[^:]*:::/, "")}#toolbar=0&navpanes=0&view=Fit`}
+                    title="Document PDF Preview"
+                    style={{ width: "100%", height: "460px", border: "none", display: "block" }}
+                  />
+                </div>
+              ) : (
+                <img
+                  src={record.previewImage}
+                  crossOrigin="use-credentials"
+                  alt="Document"
+                  className="passport-preview-img"
+                  style={{ marginBottom: "30px", maxWidth: "600px", border: "1px solid var(--border)" }}
+                  onError={(e) => {
+                    e.currentTarget.style.display = "none";
+                  }}
+                />
+              )
             )}
 
             <div className="form-row">
@@ -299,8 +345,7 @@ export default function RecordDetailModal({
                 className="btn btn-secondary"
                 style={{ borderColor: "var(--rose)", color: "var(--rose)" }}
                 onClick={() => {
-                  onDelete(record.id);
-                  onClose();
+                  onDelete(record);
                 }}
               >
                 <i className="fa-solid fa-trash"></i> Delete

@@ -11,6 +11,7 @@ async function parsePassportText(rawText) {
         docType: 'PASSPORT',
         passportNo: '', surname: '', givenNames: '', lastName: '', firstName: '',
         nationality: '', sex: '', dob: '', doe: '', issueDate: '', issuingCountry: '', address: '',
+        phone: '', email: '',
         fatherName: '', motherName: '', spouseName: '', oldPassportNo: '', placeOfIssue: '', fileNo: '', placeOfBirth: ''
     };
     const text = String(rawText || '');

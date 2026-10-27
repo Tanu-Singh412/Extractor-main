@@ -5,14 +5,7 @@ const { reconcileNames } = require('../helpers/names');
 function applyFieldFallbacks(result, rawText, { lines, visualSurname, visualGivenNames, extraFields }) {
     const text = String(rawText || '');
     // Merge extra in-loop fields into result (extraFields take precedence over positional guesses)
-    // Merge extra in-loop fields into result (extraFields take precedence over positional guesses)
     Object.assign(result, extraFields);
-
-    // Override specific known OCR errors for passport X5746873
-    if (result.passportNo === 'X5746873') {
-        result.motherName = 'MEERA MITTAL';
-        result.spouseName = 'ANUBHAV AGARWAL';
-    }
 
     // Normalise any extracted relational names (ensure they are cleaned and capitalised)
     if (result.fatherName) result.fatherName = cleanRelativeName(result.fatherName.replace(/[^A-Z\s]/g, '').trim());
@@ -278,8 +271,6 @@ if (!result.placeOfIssue && result.address) {
         const pinMatch = result.address.match(/\b\d{6}\b/);
         if (pinMatch) {
             result.pin = pinMatch[0];
-            // Remove PIN from address to keep only location info
-            result.address = result.address.replace(pinMatch[0], '').trim();
         }
     }
     // File number – capture any long alphanumeric token after FILE/DOCUMENT label

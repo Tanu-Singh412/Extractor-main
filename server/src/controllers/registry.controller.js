@@ -1,6 +1,6 @@
 const registry = require('../repositories/registry.repository');
 
-function validateRecordPayload(body) {
+function validateRecordPayload(body, currentId = null) {
     const errors = [];
     if (!body || typeof body !== 'object') {
         return { valid: false, errors: ['Invalid request payload'] };
@@ -69,7 +69,22 @@ function validateRecordPayload(body) {
         }
     }
 
-    return { valid: errors.length === 0, errors };
+    if (errors.length > 0) {
+        return { valid: false, errors };
+    }
+
+    const duplicate = registry.findDuplicateIdentifier(body, currentId);
+    if (duplicate) {
+        return {
+            valid: false,
+            isDuplicate: true,
+            field: duplicate.field,
+            message: duplicate.message,
+            errors: [duplicate.message]
+        };
+    }
+
+    return { valid: true, errors: [] };
 }
 
 function listRecords(req, res) {
@@ -77,22 +92,54 @@ function listRecords(req, res) {
 }
 
 function createRecord(req, res) {
-    const { valid, errors } = validateRecordPayload(req.body);
-    if (!valid) {
-        return res.status(400).json({ success: false, message: errors[0], errors });
+    const result = validateRecordPayload(req.body);
+    if (!result.valid) {
+        const status = result.isDuplicate ? 409 : 400;
+        return res.status(status).json({
+            success: false,
+            message: result.message || result.errors[0],
+            field: result.field,
+            errors: result.errors
+        });
     }
-    const record = registry.createRecord(req.body);
-    res.json({ success: true, record });
+    try {
+        const record = registry.createRecord(req.body);
+        res.json({ success: true, record });
+    } catch (err) {
+        const status = err.statusCode || 400;
+        return res.status(status).json({
+            success: false,
+            message: err.message,
+            field: err.field,
+            errors: [err.message]
+        });
+    }
 }
 
 function updateRecord(req, res) {
-    const { valid, errors } = validateRecordPayload(req.body);
-    if (!valid) {
-        return res.status(400).json({ success: false, message: errors[0], errors });
+    const result = validateRecordPayload(req.body, req.params.id);
+    if (!result.valid) {
+        const status = result.isDuplicate ? 409 : 400;
+        return res.status(status).json({
+            success: false,
+            message: result.message || result.errors[0],
+            field: result.field,
+            errors: result.errors
+        });
     }
-    const record = registry.updateRecord(req.params.id, req.body);
-    if (!record) return res.status(404).json({ success: false, message: 'Record not found' });
-    res.json({ success: true, record });
+    try {
+        const record = registry.updateRecord(req.params.id, req.body);
+        if (!record) return res.status(404).json({ success: false, message: 'Record not found' });
+        res.json({ success: true, record });
+    } catch (err) {
+        const status = err.statusCode || 400;
+        return res.status(status).json({
+            success: false,
+            message: err.message,
+            field: err.field,
+            errors: [err.message]
+        });
+    }
 }
 
 function deleteRecord(req, res) {

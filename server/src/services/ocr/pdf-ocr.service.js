@@ -15,7 +15,7 @@ console.log(`[OCR] PDF engines — pdf-parse: ${!!pdfParse} | pdf-poppler: ${!!p
 
 async function ocrPdfViaPdfToImg(filePath) {
     const { pdf } = pdfToImg;
-    const document = await pdf(filePath, { scale: 2 }); // 3→2: render time half, OCR quality same
+    const document = await pdf(filePath, { scale: 2.5 });
     const texts = [];
     let i = 0;
     for await (const img of document) {
@@ -41,7 +41,7 @@ async function ocrScannedPdf(filePath) {
         try {
             await pdfPoppler.convert(filePath, {
                 format: 'png',
-                scale: 2,   // 4 se 2 — render time ~4x faster, quality still OCR-worthy
+                scale: 2.5,
                 out_dir: outDir,
                 out_prefix: 'pg',
             });

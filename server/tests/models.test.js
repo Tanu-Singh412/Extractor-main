@@ -29,6 +29,8 @@ test('Passport model encrypts sensitive fields at rest and decrypts on access', 
     placeOfBirth: 'CALIFORNIA',
     placeOfIssue: 'WASHINGTON',
     address: '123 Sunset Blvd, Los Angeles, CA',
+    phone: '+1 555-123-4567',
+    email: 'john.doe@example.com',
     fatherName: 'Robert Doe',
     motherName: 'Mary Doe',
     spouseName: 'Jane Doe',
@@ -46,6 +48,9 @@ test('Passport model encrypts sensitive fields at rest and decrypts on access', 
   const rawStoredPassportNo = passportDoc.get('passportNo', null, { getters: false });
   assert.ok(isEncrypted(rawStoredPassportNo), 'Stored passport number must be encrypted at rest');
 
+  const rawStoredPhone = passportDoc.get('phone', null, { getters: false });
+  assert.ok(isEncrypted(rawStoredPhone), 'Stored passport phone must be encrypted at rest');
+
   // Verify getter provides decrypted plaintext
   assert.equal(passportDoc.passportNo, 'Z9876543');
   assert.equal(passportDoc.firstName, 'John');
@@ -55,6 +60,8 @@ test('Passport model encrypts sensitive fields at rest and decrypts on access', 
   assert.equal(passportDoc.sex, 'M');
   assert.equal(passportDoc.dob, '1985-06-15');
   assert.equal(passportDoc.doe, '2032-06-14');
+  assert.equal(passportDoc.phone, '+1 555-123-4567');
+  assert.equal(passportDoc.email, 'john.doe@example.com');
   assert.equal(passportDoc.mrz.valid, true);
   assert.equal(passportDoc.extraction.sourceFileName, 'passport-sample.jpg');
   assert.equal(passportDoc.isValid, true);
@@ -67,6 +74,8 @@ test('Passport model encrypts sensitive fields at rest and decrypts on access', 
   assert.equal(registryFormat.lastName, 'DOE');
   assert.equal(registryFormat.fatherName, 'Robert Doe');
   assert.equal(registryFormat.address, '123 Sunset Blvd, Los Angeles, CA');
+  assert.equal(registryFormat.phone, '+1 555-123-4567');
+  assert.equal(registryFormat.email, 'john.doe@example.com');
 });
 
 test('Insurance model encrypts policy number, contact and subfields at rest', () => {

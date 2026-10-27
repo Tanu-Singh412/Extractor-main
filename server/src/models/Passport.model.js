@@ -47,7 +47,8 @@ const PassportSchema = new mongoose.Schema({
     required: true,
     trim: true,
     set: encrypt,
-    get: decrypt
+    get: decrypt,
+    unique: true
   },
   passportNoHash: {
     type: String,
@@ -129,6 +130,23 @@ const PassportSchema = new mongoose.Schema({
   address: {
     type: String,
     trim: true,
+    default: '',
+    set: encrypt,
+    get: decrypt
+  },
+
+  // Sensitive Contact Information (Encrypted at rest)
+  phone: {
+    type: String,
+    trim: true,
+    default: '',
+    set: encrypt,
+    get: decrypt
+  },
+  email: {
+    type: String,
+    trim: true,
+    lowercase: true,
     default: '',
     set: encrypt,
     get: decrypt
@@ -250,6 +268,8 @@ PassportSchema.statics.fromOcr = function (ocrData, rawText = '', sourceFileName
     placeOfBirth: ocrData.placeOfBirth || '',
     placeOfIssue: ocrData.placeOfIssue || '',
     address: ocrData.address || '',
+    phone: ocrData.phone || '',
+    email: ocrData.email || '',
     fatherName: ocrData.fatherName || '',
     motherName: ocrData.motherName || '',
     spouseName: ocrData.spouseName || '',
@@ -306,6 +326,8 @@ PassportSchema.methods.toRegistryFormat = function () {
     placeOfBirth: obj.placeOfBirth,
     placeOfIssue: obj.placeOfIssue,
     address: decrypt(obj.address),
+    phone: decrypt(obj.phone),
+    email: decrypt(obj.email),
     fatherName: decrypt(obj.fatherName),
     motherName: decrypt(obj.motherName),
     spouseName: decrypt(obj.spouseName),

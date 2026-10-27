@@ -1,4 +1,4 @@
-﻿import React, { useState } from "react";
+import React, { useState } from "react";
 import { login } from "../services/api";
 import Brand from "../components/common/Brand";
 
@@ -15,14 +15,13 @@ export default function LoginPage({ onLogin }) {
     setIsLoading(true);
     try {
       const data = await login(username, password);
-      if (data.success) onLogin(data.admin);
-      else setErrorMsg(data.message || "Invalid username or password.");
-    } catch (err) {
-      if (username === "admin" && password === "admin") {
-        onLogin({ username: "admin", role: "admin" });
+      if (data.success && data.admin) {
+        onLogin(data.admin);
       } else {
-        setErrorMsg(err.message || "Unable to sign in. Please try again.");
+        setErrorMsg(data.message || "Invalid username or password.");
       }
+    } catch (err) {
+      setErrorMsg(err.message || "Invalid username or password.");
     } finally {
       setIsLoading(false);
     }

@@ -70,16 +70,43 @@ test('auth routes: login, me, and logout cycle', async t => {
     assert.equal(meData.success, true);
     assert.equal(meData.admin.username, 'testadmin');
 
-    // 5. Logout
+    // 5. Change password with invalid current password
+    res = await fetch(`${base}/api/auth/change-password`, {
+        method: 'POST',
+        headers: { Cookie: cookieValue, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentPassword: 'wrongpassword', newPassword: 'newpassword123' })
+    });
+    assert.equal(res.status, 400);
+
+    // 6. Change password successfully
+    res = await fetch(`${base}/api/auth/change-password`, {
+        method: 'POST',
+        headers: { Cookie: cookieValue, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentPassword: 'password123', newPassword: 'newpassword123' })
+    });
+    assert.equal(res.status, 200);
+    const pwdData = await res.json();
+    assert.equal(pwdData.success, true);
+
+    // 7. Verify login with new password works
+    res = await fetch(`${base}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: 'testadmin', password: 'newpassword123' })
+    });
+    assert.equal(res.status, 200);
+
+    // 8. Logout
     res = await fetch(`${base}/api/auth/logout`, {
         method: 'POST',
         headers: { Cookie: cookieValue }
     });
     assert.equal(res.status, 200);
 
-    // 6. /api/auth/me after logout should now fail
+    // 9. /api/auth/me after logout should now fail
     res = await fetch(`${base}/api/auth/me`, {
         headers: { Cookie: cookieValue }
     });
     assert.equal(res.status, 401);
 });
+

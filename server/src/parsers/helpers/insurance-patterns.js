@@ -25,7 +25,16 @@ function applySubtypePatterns(subtype, text, result) {
             const regex = new RegExp(pattern, 'i');
             const m = upper.match(regex);
             if (m && m[1]) {
-                result[field] = m[1].trim();
+                const val = m[1].trim();
+                const valUpper = val.toUpperCase();
+                // Filter out obvious header/label noise
+                if (['NUMBER', 'VEHICLE', 'MAKE', 'MODEL', 'VARIANT', 'ABOUT YOUR VEHICLE', 'DETAILS'].includes(valUpper)) continue;
+                if ((field === 'engineNo' || field === 'chassisNo') && (!/\d/.test(val) || !/[A-Za-z]/.test(val) || val.length < 5)) continue;
+                if ((field === 'registrationNo' || field === 'vehicleNo') && (!/\d/.test(val) || !/[A-Za-z]/.test(val))) continue;
+                if (field === 'policyNo' && /STAMP|ORDER|VIDE|DUTY|RECEIPT|INVOICE|GSTIN/i.test(val)) continue;
+                if (field === 'fuelType' && !/^(?:PETROL|DIESEL|CNG(?:\s*\/\s*LPG)?|LPG|EV|ELECTRIC|HYBRID)$/i.test(val)) continue;
+
+                result[field] = val;
                 matchCount++;
             }
         } catch (e) {

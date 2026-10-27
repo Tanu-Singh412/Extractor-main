@@ -59,7 +59,7 @@ function createSession(admin) {
     // Bound the in-memory store; a fresh login replaces this admin's older sessions.
     for (const [key, session] of sessions) if (session.adminId === admin.id) sessions.delete(key);
     const token = randomBytes(32).toString('hex');
-    sessions.set(digest(token), { adminId: admin.id, expiresAt: Date.now() + SESSION_TTL_MS });
+    sessions.set(digest(token), { adminId: admin.id, createdAt: Date.now(), expiresAt: Date.now() + SESSION_TTL_MS });
     savePersistedSessions(sessions);
     return token;
 }
@@ -86,4 +86,32 @@ function deleteSession(req) {
     }
 }
 
-module.exports = { createSession, getSession, deleteSession };
+function revokeOtherSessions(req, adminId) {
+    const currentToken = requestToken(req);
+    const currentKey = currentToken ? digest(currentToken) : null;
+    let changed = false;
+    for (const [key, session] of sessions) {
+        if (session.adminId === adminId && key !== currentKey) {
+            sessions.delete(key);
+            changed = true;
+        }
+    }
+    if (currentKey && sessions.has(currentKey)) {
+        sessions.get(currentKey).createdAt = Date.now();
+        changed = true;
+    }
+    if (changed) savePersistedSessions(sessions);
+}
+
+function revokeAllSessions(adminId) {
+    let changed = false;
+    for (const [key, session] of sessions) {
+        if (session.adminId === adminId) {
+            sessions.delete(key);
+            changed = true;
+        }
+    }
+    if (changed) savePersistedSessions(sessions);
+}
+
+module.exports = { createSession, getSession, deleteSession, revokeOtherSessions, revokeAllSessions };

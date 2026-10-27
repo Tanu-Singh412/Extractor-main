@@ -18,7 +18,8 @@ const KNOWN_PROVIDERS = [
 
 const BAD_POLICY_WORDS = new Set([
     'POLICY', 'NUMBER', 'POLICYNO', 'CERTIFICATE', 'MEMBERSHIP', 'INSURANCE', 'DETAILS',
-    'STATEMENT', 'SCHEDULE', 'DOCUMENT', 'NO', 'NUM', 'TYPE', 'FORM', 'PERIOD', 'DATE'
+    'STATEMENT', 'SCHEDULE', 'DOCUMENT', 'NO', 'NUM', 'TYPE', 'FORM', 'PERIOD', 'DATE',
+    'STAMPS', 'STAMP', 'ORDER', 'VIDE', 'DUTY', 'CONSOLIDATED', 'RECEIPT', 'INVOICE', 'GSTIN'
 ]);
 
 const BAD_MEMBER_NAMES = new Set([
@@ -47,14 +48,16 @@ function cleanPolicyNumber(raw) {
     if (!raw) return '';
     // Only look at the current line
     let v = String(raw).split(/\r?\n/)[0];
-    // Strip trailing keywords like VALID, EXPIRY, DATE, PERIOD, NAME, MEMBER
-    v = v.split(/(?:VALID|EXPIR|DATE|UNTIL|THRU|EFFECTIVE|FROM|TO|ISSUED|CARD|NAME|PLAN|CODE|PERIOD|PREMIUM|MEMBER|INSURED|PROPOSER|HOLDER|CUSTOMER)/i)[0];
+    // Strip trailing keywords like VALID, EXPIRY, DATE, PERIOD, NAME, MEMBER, STAMP, ORDER
+    v = v.split(/(?:VALID|EXPIR|DATE|UNTIL|THRU|EFFECTIVE|FROM|TO|ISSUED|CARD|NAME|PLAN|CODE|PERIOD|PREMIUM|MEMBER|INSURED|PROPOSER|HOLDER|CUSTOMER|STAMP|ORDER|VIDE|DUTY|RECEIPT|INVOICE)/i)[0];
     // Remove characters that aren't alphanumeric or hyphen/slash
     v = v.replace(/[^A-Za-z0-9\-\/]/g, '').trim().toUpperCase();
     // Collapse duplicate dashes or slashes
     v = v.replace(/-{2,}/g, '-').replace(/\/{2,}/g, '/');
     if (v.length < 5 || v.length > 40) return '';
     if (BAD_POLICY_WORDS.has(v)) return '';
+    // Reject strings that are actually stamp/order/vide/duty/receipt numbers
+    if (/STAMP|ORDER|VIDE|DUTY|RECEIPT|INVOICE|GSTIN|CIN|IRDAI/i.test(v)) return '';
     // Policy numbers must contain at least one digit
     if (!/\d/.test(v)) return '';
     return v;
@@ -103,20 +106,45 @@ async function parseInsuranceText(rawText) {
     }
 
     /* 2) Policy number */
-    const policyPatterns = [
-        /(?:POL(?:IC)?Y\s*(?:\/|\&)?\s*CERT(?:IFICATE)?|CERT(?:IFICATE)?\s*(?:\/|\&)?\s*POL(?:IC)?Y|POL(?:IC)?Y|CERT(?:IFICATE)?|SCHEDULE|COVER\s*NOTE|PROPOSAL)\s*(?:\/|\s)*(?:NO\.?|NUMBER|NUM|#|N[O0]|NE)?\s*[:.\-]?\s*([A-Z0-9][A-Z0-9 \t\/\.-]{3,40})/i,
-        /POLICY\s*(?:IDENTIFIER|ID|REF(?:ERENCE)?)\s*[:.\-]?\s*([A-Z0-9][A-Z0-9 \t\/\.-]{3,40})/i,
-        /CERTIFICATE\s*(?:OF\s*INSURANCE)?\s*(?:NO\.?|NUMBER|#)?\s*[:.\-]?\s*([A-Z0-9][A-Z0-9 \t\/\.-]{3,40})/i,
-        /MEMBERSHIP\s*(?:NO\.?|NUMBER|ID)\s*[:.\-]?\s*([A-Z0-9][A-Z0-9 \t\/\.-]{3,40})/i,
-    ];
-
-    for (const p of policyPatterns) {
-        const m = upper.match(p);
+    // Multi-line chunk scanning (handles tabular/grid where "Policy / Certificate \n No \n : <candidate>")
+    for (let i = 0; i < lines.length; i++) {
+        const chunk = (lines[i] + ' ' + (lines[i + 1] || '') + ' ' + (lines[i + 2] || '')).toUpperCase();
+        // 1. Direct "Policy Number POPM..." or "Policy / Certificate No : POPM..."
+        const m = chunk.match(/(?:POLICY\s*(?:\/|\&)?\s*CERTIFICATE|POLICY|CERTIFICATE)\s*(?:NO\.?|NUMBER|#)?\s*[:.\-]?\s*([A-Z0-9][A-Z0-9\/\-]{5,35})\b/i);
         if (m) {
-            const candidate = cleanPolicyNumber(m[1]);
-            if (candidate) {
-                result.policyNo = candidate;
+            const cand = cleanPolicyNumber(m[1]);
+            if (cand) {
+                result.policyNo = cand;
                 break;
+            }
+        }
+        // 2. "Policy POPM... is issued"
+        const m2 = chunk.match(/\bPOLICY\s+([A-Z0-9][A-Z0-9\/\-]{6,35})\s+IS\s+ISSUED\b/i);
+        if (m2) {
+            const cand = cleanPolicyNumber(m2[1]);
+            if (cand) {
+                result.policyNo = cand;
+                break;
+            }
+        }
+    }
+
+    if (!result.policyNo) {
+        const policyPatterns = [
+            /(?:POL(?:IC)?Y\s*(?:\/|\&)?\s*CERT(?:IFICATE)?|CERT(?:IFICATE)?\s*(?:\/|\&)?\s*POL(?:IC)?Y|POL(?:IC)?Y|CERT(?:IFICATE)?|SCHEDULE|COVER\s*NOTE|PROPOSAL)\s*(?:\/|\s)*(?:NO\.?|NUMBER|NUM|#|N[O0]|NE)\s*[:.\-]?\s*([A-Z0-9][A-Z0-9 \t\/\.-]{3,40})/i,
+            /POLICY\s*(?:IDENTIFIER|ID|REF(?:ERENCE)?)\s*[:.\-]?\s*([A-Z0-9][A-Z0-9 \t\/\.-]{3,40})/i,
+            /CERTIFICATE\s*(?:OF\s*INSURANCE)?\s*(?:NO\.?|NUMBER|#)\s*[:.\-]?\s*([A-Z0-9][A-Z0-9 \t\/\.-]{3,40})/i,
+            /MEMBERSHIP\s*(?:NO\.?|NUMBER|ID)\s*[:.\-]?\s*([A-Z0-9][A-Z0-9 \t\/\.-]{3,40})/i,
+        ];
+
+        for (const p of policyPatterns) {
+            const m = upper.match(p);
+            if (m) {
+                const candidate = cleanPolicyNumber(m[1]);
+                if (candidate) {
+                    result.policyNo = candidate;
+                    break;
+                }
             }
         }
     }
@@ -125,14 +153,14 @@ async function parseInsuranceText(rawText) {
     if (!result.policyNo) {
         for (let i = 0; i < lines.length; i++) {
             const U = lines[i].toUpperCase();
-            const labelMatch = U.match(/(?:POL(?:IC)?Y\s*(?:\/|\&)?\s*CERT(?:IFICATE)?|POLICY|CERTIFICATE|SCHEDULE|COVER\s*NOTE|PROPOSAL)\s*(?:NO\.?|NUMBER|#)?\s*[:.\-]?\s*([A-Z0-9 \t\/\.-]{4,})/i);
+            const labelMatch = U.match(/(?:POL(?:IC)?Y\s*(?:\/|\&)?\s*CERT(?:IFICATE)?|POLICY|CERTIFICATE|SCHEDULE|COVER\s*NOTE|PROPOSAL)\s*(?:NO\.?|NUMBER|#)\s*[:.\-]?\s*([A-Z0-9 \t\/\.-]{4,})/i);
             if (labelMatch) {
                 const lineCandidate = cleanPolicyNumber(labelMatch[1]);
                 if (lineCandidate) {
                     result.policyNo = lineCandidate;
                     break;
                 }
-            } else if (/(?:POLICY|CERTIFICATE|SCHEDULE|COVER\s*NOTE|PROPOSAL)\s*(?:NO\.?|NUMBER|#)?/i.test(U) && lines[i + 1]) {
+            } else if (/(?:POLICY|CERTIFICATE|SCHEDULE|COVER\s*NOTE|PROPOSAL)\s*(?:NO\.?|NUMBER|#)/i.test(U) && lines[i + 1]) {
                 const nextTokens = lines[i + 1].toUpperCase().split(/\s+/);
                 for (const tok of nextTokens) {
                     const cleanedTok = cleanPolicyNumber(tok);
@@ -309,14 +337,11 @@ async function parseInsuranceText(rawText) {
 
     if (bestSubtype) {
         matchCounts[bestSubtype] = applySubtypePatterns(bestSubtype, text, result);
-    }
-    for (const stype of Object.keys(insurancePatterns)) {
-        if (stype !== bestSubtype) {
+        result.insuranceType = bestSubtype === 'CAR' ? 'MOTOR' : bestSubtype;
+    } else {
+        for (const stype of Object.keys(insurancePatterns)) {
             matchCounts[stype] = applySubtypePatterns(stype, text, result);
         }
-    }
-
-    if (!bestSubtype) {
         let maxMatches = 0;
         for (const [stype, count] of Object.entries(matchCounts)) {
             if (count > maxMatches && count > 0) {
@@ -324,42 +349,123 @@ async function parseInsuranceText(rawText) {
                 bestSubtype = stype;
             }
         }
-    }
-
-    if (bestSubtype) {
-        result.insuranceType = bestSubtype === 'CAR' ? 'MOTOR' : bestSubtype;
+        if (bestSubtype) {
+            result.insuranceType = bestSubtype === 'CAR' ? 'MOTOR' : bestSubtype;
+        }
     }
 
     /* 7) Motor Specific Robust Fallbacks */
     if (result.insuranceType === 'MOTOR' || bestSubtype === 'CAR' || /VEHICLE|MOTOR|CHASSIS|ENGINE/i.test(text)) {
         result.insuranceType = 'MOTOR';
 
-        // Registration Number (Indian formats e.g. MH02AB1234, DL-01-C-1234, 22BH1234AA)
+        // 1. Structured table scanning (e.g. "YOUR VEHICLE DETAILS" line by line)
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            const U = line.toUpperCase();
+
+            // Registration Number
+            if (/REGISTRATION\s*(?:NUMBER|NO\.?)/i.test(U)) {
+                const m = line.match(/REGISTRATION\s*(?:NUMBER|NO\.?)\s*[:.\-]?\s*([A-Z0-9\s\-]+)/i);
+                if (m && m[1]) {
+                    const rawReg = m[1].trim().replace(/\s+/g, ' ').toUpperCase();
+                    const compactReg = rawReg.replace(/[^A-Z0-9]/gi, '');
+                    if (/^[A-Z]{2}[0-9]{1,2}[A-Z]{1,3}[0-9]{4}$/.test(compactReg) || /^[0-9]{2}BH[0-9]{4}[A-Z]{1,2}$/.test(compactReg)) {
+                        result.registrationNo = rawReg;
+                    }
+                }
+            }
+
+            // Engine Number
+            if (/\bENGINE\s*(?:NUMBER|NO\.?)/i.test(U) && !/CHASSIS/i.test(U)) {
+                const m = line.match(/\bENGINE\s*(?:NUMBER|NO\.?)\s*[:.\-]?\s*([A-Z0-9\-]+)/i);
+                if (m && m[1] && /[A-Z]/.test(m[1]) && /\d/.test(m[1]) && m[1].length >= 5) {
+                    result.engineNo = m[1].toUpperCase();
+                }
+            }
+
+            // Chassis Number
+            if (/\bCHASSIS\s*(?:NUMBER|NO\.?)/i.test(U) && !/ENGINE/i.test(U)) {
+                const m = line.match(/\bCHASSIS\s*(?:NUMBER|NO\.?)\s*[:.\-]?\s*([A-Z0-9\-]+)/i);
+                if (m && m[1] && /[A-Z]/.test(m[1]) && /\d/.test(m[1]) && m[1].length >= 5) {
+                    result.chassisNo = m[1].toUpperCase();
+                }
+            }
+
+            // Vehicle Make
+            if (/\bVEHICLE\s*MAKE\b/i.test(U) && !/MODEL|VARIANT/i.test(U)) {
+                const m = line.match(/\bVEHICLE\s*MAKE\s*[:.\-]?\s*([A-Za-z0-9\s]+)/i);
+                if (m && m[1] && !/MODEL|TYPE|NUMBER|YEAR|VARIANT/i.test(m[1])) {
+                    result.make = titleCase(m[1].trim());
+                }
+            }
+
+            // Vehicle Model
+            if (/\bVEHICLE\s*MODEL\b/i.test(U) && !/MAKE|VARIANT/i.test(U)) {
+                const m = line.match(/\bVEHICLE\s*MODEL\s*[:.\-]?\s*([A-Za-z0-9\s\-]+)/i);
+                if (m && m[1] && !/MAKE|VARIANT|NUMBER|YEAR|TYPE/i.test(m[1])) {
+                    result.model = titleCase(m[1].trim());
+                }
+            }
+
+            // Vehicle Variant
+            if (/\bVEHICLE\s*VARIANT\b/i.test(U) && !/MAKE|MODEL/i.test(U)) {
+                const m = line.match(/\bVEHICLE\s*VARIANT\s*[:.\-]?\s*([A-Za-z0-9\s\-]+)/i);
+                if (m && m[1] && !/MAKE|MODEL|NUMBER|ABOUT|YOUR/i.test(m[1])) {
+                    result.variant = titleCase(m[1].trim());
+                }
+            }
+
+            // Fuel
+            if (/\bFUEL\b/i.test(U) && !/NUMBER|CUBIC|CAPACITY/i.test(U)) {
+                const m = line.match(/\bFUEL\s*[:.\-]?\s*(PETROL|DIESEL|CNG(?:\s*\/\s*LPG)?|LPG|EV|ELECTRIC|HYBRID)\b/i);
+                if (m) result.fuelType = titleCase(m[1]);
+            }
+        }
+
+        // Clean out invalid captures from subtype regexes
+        if (result.registrationNo && (!/\d/.test(result.registrationNo) || /VEHICLE|MAKE|MODEL|NUMBER/i.test(result.registrationNo))) {
+            result.registrationNo = '';
+        }
+        if (result.make && /MODEL|VARIANT|MAKE|ABOUT|YOUR|VEHICLE|NUMBER/i.test(result.make)) {
+            result.make = '';
+        }
+        if (result.model && /MODEL|VARIANT|MAKE|ABOUT|YOUR|VEHICLE|NUMBER/i.test(result.model)) {
+            result.model = '';
+        }
+        if (result.variant && /MODEL|VARIANT|MAKE|ABOUT|YOUR|VEHICLE|NUMBER/i.test(result.variant)) {
+            result.variant = '';
+        }
+        if (result.fuelType && !/^(?:Petrol|Diesel|Cng|Lpg|Ev|Electric|Hybrid)/i.test(result.fuelType)) {
+            result.fuelType = '';
+        }
+
         if (!result.registrationNo) {
             const regMatch = upper.match(/\b([A-Z]{2}\s*[-]?\s*[0-9]{1,2}\s*[-]?\s*[A-Z]{1,3}\s*[-]?\s*[0-9]{4})\b/)
                 || upper.match(/\b([0-9]{2}\s*BH\s*[0-9]{4}\s*[A-Z]{1,2})\b/);
             if (regMatch) {
-                result.registrationNo = regMatch[1].replace(/\s+/g, '').toUpperCase();
+                result.registrationNo = regMatch[1].trim().replace(/\s+/g, ' ').toUpperCase();
             }
         }
 
         // Engine Number & Chassis Number
         // 1. Combined Engine & Chassis Number (e.g. "Engine & Chassis Number: JC44E0248187 & ME4JC445H98238320")
-        for (let i = 0; i < lines.length; i++) {
-            const combined = (lines[i] + ' ' + (lines[i + 1] || '')).toUpperCase();
-            if (/ENGINE\s*(?:&|\/)\s*CHASSIS/i.test(combined)) {
-                const ecMatch = combined.match(/(?:ENGINE\s*(?:&|\/)\s*CHASSIS\s*(?:NUMBER|NO\.?)?[\s:]+)?([A-Z0-9-]{5,25})\s*(?:&|\/)\s*([A-Z0-9-]{5,25})/i);
-                if (ecMatch && /[A-Z]/.test(ecMatch[1]) && /\d/.test(ecMatch[1]) && /[A-Z]/.test(ecMatch[2]) && /\d/.test(ecMatch[2])) {
-                    result.engineNo = ecMatch[1];
-                    result.chassisNo = ecMatch[2];
-                    break;
-                }
-            } else if (/CHASSIS\s*(?:&|\/)\s*ENGINE/i.test(combined)) {
-                const ceMatch = combined.match(/(?:CHASSIS\s*(?:&|\/)\s*ENGINE\s*(?:NUMBER|NO\.?)?[\s:]+)?([A-Z0-9-]{5,25})\s*(?:&|\/)\s*([A-Z0-9-]{5,25})/i);
-                if (ceMatch && /[A-Z]/.test(ceMatch[1]) && /\d/.test(ceMatch[1]) && /[A-Z]/.test(ceMatch[2]) && /\d/.test(ceMatch[2])) {
-                    result.chassisNo = ceMatch[1];
-                    result.engineNo = ceMatch[2];
-                    break;
+        if (!result.engineNo || !result.chassisNo) {
+            for (let i = 0; i < lines.length; i++) {
+                const combined = (lines[i] + ' ' + (lines[i + 1] || '')).toUpperCase();
+                if (/ENGINE\s*(?:&|\/)\s*CHASSIS/i.test(combined)) {
+                    const ecMatch = combined.match(/(?:ENGINE\s*(?:&|\/)\s*CHASSIS\s*(?:NUMBER|NO\.?)?[\s:]+)?([A-Z0-9-]{5,25})\s*(?:&|\/)\s*([A-Z0-9-]{5,25})/i);
+                    if (ecMatch && /[A-Z]/.test(ecMatch[1]) && /\d/.test(ecMatch[1]) && /[A-Z]/.test(ecMatch[2]) && /\d/.test(ecMatch[2])) {
+                        result.engineNo = ecMatch[1];
+                        result.chassisNo = ecMatch[2];
+                        break;
+                    }
+                } else if (/CHASSIS\s*(?:&|\/)\s*ENGINE/i.test(combined)) {
+                    const ceMatch = combined.match(/(?:CHASSIS\s*(?:&|\/)\s*ENGINE\s*(?:NUMBER|NO\.?)?[\s:]+)?([A-Z0-9-]{5,25})\s*(?:&|\/)\s*([A-Z0-9-]{5,25})/i);
+                    if (ceMatch && /[A-Z]/.test(ceMatch[1]) && /\d/.test(ceMatch[1]) && /[A-Z]/.test(ceMatch[2]) && /\d/.test(ceMatch[2])) {
+                        result.chassisNo = ceMatch[1];
+                        result.engineNo = ceMatch[2];
+                        break;
+                    }
                 }
             }
         }
@@ -380,7 +486,7 @@ async function parseInsuranceText(rawText) {
 
         // Manufacturing Year
         if (!result.manufacturingYear) {
-            const mfgMatch = upper.match(/(?:MFG|MANUFACTURING|YEAR\s*OF\s*MFG)\s*(?:YEAR|DATE)?\s*[:.\-]?\s*([12][0-9]{3})\b/i);
+            const mfgMatch = upper.match(/(?:MFG|MANUFACTURING|YEAR\s*OF\s*MFG|YEAR\s*OF\s*MANUFACTURE)\s*(?:YEAR|DATE)?\s*[:.\-]?\s*([12][0-9]{3})\b/i);
             if (mfgMatch) {
                 const y = parseInt(mfgMatch[1], 10);
                 if (y >= 1990 && y <= new Date().getFullYear() + 1) {
@@ -420,14 +526,14 @@ async function parseInsuranceText(rawText) {
             // Next check separate MAKE ... and MODEL ... labels (even on lines with other table columns)
             if (!result.make) {
                 const makeLabelMatch = upper.match(/\bMAKE\s*[:.\-]?\s*([A-Za-z0-9]+(?:\s+[A-Za-z0-9]+)?)\b/i);
-                if (makeLabelMatch && !/MODEL|YEAR|REGISTRATION|POLICY|CHASSIS|ENGINE/i.test(makeLabelMatch[1])) {
+                if (makeLabelMatch && !/MODEL|YEAR|REGISTRATION|POLICY|CHASSIS|ENGINE|VARIANT/i.test(makeLabelMatch[1])) {
                     result.make = titleCase(makeLabelMatch[1].trim());
                 }
             }
             if (!result.model) {
                 const modelLabelMatch = upper.match(/\bMODEL\s*[:.\-]?\s*([A-Za-z0-9\-]+(?:\s+[A-Za-z0-9\-]+){0,4}(?:\([^\)]+\))?)/i);
                 if (modelLabelMatch) {
-                    const cleanMod = modelLabelMatch[1].split(/(?:PERIOD|YEAR|REGISTRATION|POLICY|CHASSIS|ENGINE|DATE)/i)[0].trim();
+                    const cleanMod = modelLabelMatch[1].split(/(?:PERIOD|YEAR|REGISTRATION|POLICY|CHASSIS|ENGINE|DATE|VARIANT)/i)[0].trim();
                     if (cleanMod.length >= 2) result.model = titleCase(cleanMod);
                 }
             }
@@ -466,7 +572,6 @@ async function parseInsuranceText(rawText) {
             const idvMatch = upper.match(/(?:INSURED\s*DECLARED\s*VALUE|IDV)\s*(?:\([A-Z]+\))?\s*[:.\-]?\s*(?:RS\.?|INR)?\s*([0-9,]+(?:\.[0-9]{2})?)/i);
             if (idvMatch) result.idv = idvMatch[1].trim();
         }
-
 
         // NCB
         if (!result.ncb) {
@@ -507,15 +612,51 @@ async function parseInsuranceText(rawText) {
             if (!result.email) result.email = emailAddr;
         }
     }
-    if (!result.address) {
-        const addressMatch = text.match(/(?:Communication\s*Address|Proposer\s*Address|Correspondence\s*Address|Address|Add)\s*[:.\-]?\s*([^\n]+(?:\n[^\n]+){0,3})/i);
-        if (addressMatch) {
-            const addLines = addressMatch[1].split('\n')
-                .map(l => l.replace(/^[.\s,]+/, '').trim())
-                .filter(l => l && !/(?:Phone|Email|Policy|Issue|Issuance|Premium|GSTIN|Contact|PAN|Date|GST)/i.test(l));
-            let cleanAddr = addLines.join(', ').replace(/\s{2,}/g, ' ').trim();
-            cleanAddr = cleanAddr.replace(/\s*(?:Tel\.?|Contact|Phone|Mob\.?)\s*[:.\-]?\s*\d{8,12}.*$/i, '').trim();
-            if (cleanAddr.length >= 8) result.address = cleanAddr;
+    if (!result.address || result.address.length < 8 || /InsureMo/i.test(result.address)) {
+        result.address = '';
+        // 1. Look for explicit Address block with actual content following
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            if (/(?:Proposer\s*Address|Communication\s*Address|Correspondence\s*Address)\s*[:.\-]?\s*(.+)/i.test(line)) {
+                const m = line.match(/(?:Proposer\s*Address|Communication\s*Address|Correspondence\s*Address)\s*[:.\-]?\s*(.+)/i);
+                if (m && m[1]) {
+                    let addr = m[1].trim();
+                    let j = i + 1;
+                    while (j < lines.length && j <= i + 3) {
+                        const nextL = lines[j];
+                        if (/^(?:Proposer|Policy|Contact|Phone|Email|Mobile|Insured|Nominee|Details|Registration|Vehicle)/i.test(nextL)) break;
+                        if (/\b(?:India|\d{6}|Pradesh|Nagar|Colony|Road|Street)\b/i.test(nextL) || nextL.includes(',')) {
+                            addr += ' ' + nextL;
+                            j++;
+                        } else {
+                            break;
+                        }
+                    }
+                    addr = addr.replace(/\s+/g, ' ').replace(/^[,:.\s\-]+/, '').trim();
+                    if (addr.length >= 10 && !/InsureMo/i.test(addr)) {
+                        result.address = addr;
+                        break;
+                    }
+                }
+            }
+        }
+
+        // 2. Scan for address lines containing Indian PIN code or state
+        if (!result.address) {
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                if (/\b\d{6}\b/.test(line) && /\b(?:India|Pradesh|Maharashtra|Delhi|Gujarat|Rajasthan|Haryana|Punjab|Karnataka|Tamil|Bengal|Bihar)\b/i.test(line)) {
+                    let addr = line;
+                    if (lines[i - 1] && /\b(?:Road|Colony|Gali|Street|Nagar|Sector|Floor|House|Plot|Flat)\b/i.test(lines[i - 1])) {
+                        addr = lines[i - 1] + ' ' + addr;
+                    }
+                    addr = addr.replace(/\s+/g, ' ').replace(/^[,:.\s\-]+/, '').trim();
+                    if (addr.length >= 10 && !/InsureMo/i.test(addr)) {
+                        result.address = addr;
+                        break;
+                    }
+                }
+            }
         }
     }
 

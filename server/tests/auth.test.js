@@ -108,5 +108,14 @@ test('auth routes: login, me, and logout cycle', async t => {
         headers: { Cookie: cookieValue }
     });
     assert.equal(res.status, 401);
+
+    // 10. Login with OLD password must be rejected
+    res = await fetch(`${base}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: 'testadmin', password: 'password123' })
+    });
+    assert.equal(res.status, 401);
 });
+
 

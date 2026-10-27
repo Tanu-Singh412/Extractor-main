@@ -54,9 +54,11 @@ async function changePassword(req, res) {
             return res.status(400).json({ success: false, message: 'Current password is incorrect.' });
         }
         const { hashPassword } = require('../services/password.service');
+        const { revokeOtherSessions } = require('../services/session.service');
         const newHash = await hashPassword(newPassword);
         admins.updatePassword(admin.id, newHash);
-        res.json({ success: true, message: 'Password updated successfully.' });
+        revokeOtherSessions(req, admin.id);
+        res.json({ success: true, message: 'Password updated successfully. Other devices have been logged out.' });
     } catch (err) {
         console.error('[AUTH] Change password failed:', err.message);
         res.status(500).json({ success: false, message: 'Failed to update password.' });

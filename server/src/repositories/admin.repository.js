@@ -57,6 +57,7 @@ function updatePassword(id, newPasswordHash) {
     if (!admin) throw new Error('Admin not found');
     admin.passwordHash = newPasswordHash;
     admin.updatedAt = new Date().toISOString();
+    admin.passwordChangedAt = Date.now();
     fs.mkdirSync(path.dirname(ADMINS_FILE), { recursive: true });
     const temporary = `${ADMINS_FILE}.${randomUUID()}.tmp`;
     try {

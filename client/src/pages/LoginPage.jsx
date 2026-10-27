@@ -72,7 +72,7 @@ export default function LoginPage({ onLogin }) {
           </form>
           <p className="login-help">Need access? Contact your workspace administrator.</p>
         </div>
-        <p className="login-form-footer">DocuExtract <span>/</span> Document management</p>
+        <p className="login-form-footer">DocuExtract <span>/</span> Document management · <strong>v2.1.0</strong></p>
       </section>
     </main>
   );

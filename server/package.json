@@ -1,6 +1,6 @@
 {
   "name": "passport-extractor-server",
-  "version": "1.0.0",
+  "version": "2.1.0",
   "description": "Backend API for Passport Details Extractor using Express & Tesseract.js",
   "main": "index.js",
   "scripts": {

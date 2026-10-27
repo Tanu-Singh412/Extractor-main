@@ -1,4 +1,4 @@
-﻿import React from "react";
+import React from "react";
 
 export default function TopHeader({ activeTab, currentRoute, openMobileSidebar, filterMode,
   handleStatClick, totalCount, validCount, expiringSoonCount, expiredCount,
@@ -22,7 +22,7 @@ export default function TopHeader({ activeTab, currentRoute, openMobileSidebar, 
           <span>Workspace</span><span className="breadcrumb-divider">/</span>
           <span className="breadcrumb-current">{isUpload ? "New document" : "Registry"}</span>
         </div>
-        <span className="workspace-label">Passports & insurance</span>
+        <span className="workspace-label">Passports & insurance <span className="version-pill" style={{ marginLeft: "8px", opacity: 0.8, fontSize: "11px", fontWeight: 600 }}>v2.1.0</span></span>
       </div>
       <div className="page-heading">
         <div>

@@ -1,5 +1,5 @@
 const PASSPORT_COLS = [
-    'id', 'docType', 'passportNo', 'firstName', 'lastName', 'surname', 'givenNames',
+    'id', 'docType', 'company', 'passportNo', 'firstName', 'lastName', 'surname', 'givenNames',
     'nationality', 'issuingCountry', 'sex', 'dob', 'doe', 'issueDate', 'placeOfBirth', 'placeOfIssue',
     'phone', 'email', 'address', 'fatherName', 'motherName', 'spouseName', 'oldPassportNo', 'fileNo',
     'createdAt'
@@ -17,7 +17,7 @@ const INSURANCE_COLS = [
 ];
 
 const ALL_COLS = [
-    'id', 'docType', 'passportNo', 'firstName', 'lastName', 'surname', 'givenNames',
+    'id', 'docType', 'company', 'passportNo', 'firstName', 'lastName', 'surname', 'givenNames',
     'nationality', 'issuingCountry', 'sex', 'dob', 'doe', 'issueDate', 'placeOfBirth', 'placeOfIssue',
     'phone', 'email', 'address', 'fatherName', 'motherName', 'spouseName', 'oldPassportNo', 'fileNo',
     'insuranceType', 'policyNo', 'provider', 'memberName', 'groupNo', 'effectiveDate',

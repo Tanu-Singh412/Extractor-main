@@ -9,7 +9,11 @@ export default function VerificationForm({
   handleClearForm,
   isScanning,
   editId,
-  formErrors = {}
+  formErrors = {},
+  companies = [],
+  onAddCompany,
+  onEditCompany,
+  onDeleteCompany
 }) {
   return (
     <form id="details-form" onSubmit={handleFormSubmit} className="details-form-centered">
@@ -20,6 +24,10 @@ export default function VerificationForm({
           formState={formState}
           handleInputChange={handleInputChange}
           formErrors={formErrors}
+          companies={companies}
+          onAddCompany={onAddCompany}
+          onEditCompany={onEditCompany}
+          onDeleteCompany={onDeleteCompany}
         />
       ) : (
         <InsuranceForm

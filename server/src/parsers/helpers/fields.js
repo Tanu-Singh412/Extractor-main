@@ -19,13 +19,24 @@ function cleanAddress(s) {
         "Asha Agarwal Tis"         → "Asha Agarwal"          */
 function cleanRelativeName(s) {
     if (!s) return s;
-    const words = s.trim().split(/\s+/);
-    // Remove trailing tokens that are suspiciously short (≤3 chars) and look like OCR noise.
-    // We keep removing from the tail as long as the last word is ≤3 chars AND the remaining
-    // name still has at least 2 words (so we never erase a legitimately short last name).
+    let str = s.replace(/[^A-Za-z\s]/g, ' ').replace(/\s+/g, ' ').trim();
+    const words = str.split(/\s+/).filter(Boolean);
+    const labelWords = new Set(['NAME', 'OF', 'FATHER', 'MOTHER', 'SPOUSE', 'LEGAL', 'GUARDIAN', 'LEGA']);
+    
+    // Strip leading noise words or short artifacts (like "HV", "SE")
     while (words.length > 2) {
-        const last = words[words.length - 1];
-        if (last.length <= 3) {
+        const first = words[0].toUpperCase();
+        if (labelWords.has(first) || first.length <= 2) {
+            words.shift();
+        } else {
+            break;
+        }
+    }
+
+    // Remove trailing tokens that are suspiciously short (≤3 chars) or label leftovers
+    while (words.length > 2) {
+        const last = words[words.length - 1].toUpperCase();
+        if (labelWords.has(last) || last.length <= 3) {
             words.pop();
         } else {
             break;
@@ -46,7 +57,7 @@ function mergeFill(target, src) {
 
 function correctIndianPassportNumber(str) {
     if (!str || str.length < 7 || str.length > 9) return str;
-    const digitMap = { 'O': '0', 'I': '1', 'L': '1', 'Z': '2', 'S': '5', 'G': '6', 'T': '7', 'B': '8', 'Y': '4', 'A': '4' };
+    const digitMap = { 'O': '0', 'I': '1', 'L': '1', 'Z': '2', 'S': '5', 'G': '6', 'T': '7', 'B': '8', 'Y': '4', 'A': '4', 'D': '0' };
     const chars = str.split('');
     for (let i = 1; i < chars.length; i++) {
         if (/[A-Z]/.test(chars[i]) && digitMap[chars[i]]) {

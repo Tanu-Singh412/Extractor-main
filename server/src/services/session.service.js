@@ -2,9 +2,11 @@ const { createHash, randomBytes } = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const { COOKIE_NAME, SESSION_TTL_MS } = require('../config/auth.config');
+const { connectDB, getCollection, isMongoConnected } = require('../config/db');
 const { DATA_DIR } = require('../config/paths');
 
 const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');
+let collection = null;
 
 function loadPersistedSessions() {
     try {
@@ -26,6 +28,7 @@ function loadPersistedSessions() {
 }
 
 function savePersistedSessions(sessionsMap) {
+    if (isMongoConnected()) return; // Stored in MongoDB; no local file needed
     try {
         if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
         fs.writeFileSync(SESSIONS_FILE, JSON.stringify([...sessionsMap.entries()]));
@@ -34,6 +37,29 @@ function savePersistedSessions(sessionsMap) {
 
 const sessions = loadPersistedSessions();
 const digest = token => createHash('sha256').update(token).digest('hex');
+
+async function initSessions() {
+    await connectDB();
+    if (!isMongoConnected()) return;
+
+    try {
+        collection = getCollection('sessions');
+        await collection.createIndex({ expiresAtDate: 1 }, { expireAfterSeconds: 0 });
+        await collection.createIndex({ tokenHash: 1 }, { unique: true });
+        const now = Date.now();
+        const docs = await collection.find({ expiresAt: { $gt: now } }).toArray();
+        for (const doc of docs) {
+            sessions.set(doc.tokenHash, {
+                adminId: doc.adminId,
+                createdAt: doc.createdAt,
+                expiresAt: doc.expiresAt
+            });
+        }
+        console.log(`[AUTH] Loaded ${docs.length} active sessions from MongoDB collection "sessions".`);
+    } catch (err) {
+        console.warn(`[AUTH] MongoDB sessions setup warning (${err.message}).`);
+    }
+}
 
 function requestToken(req) {
     const cookie = (req.headers.cookie || '').split(';').map(value => value.trim())
@@ -49,6 +75,9 @@ function prune() {
         if (session.expiresAt <= now) {
             sessions.delete(key);
             changed = true;
+            if (isMongoConnected() && collection) {
+                collection.deleteOne({ tokenHash: key }).catch(() => {});
+            }
         }
     }
     if (changed) savePersistedSessions(sessions);
@@ -56,11 +85,28 @@ function prune() {
 
 function createSession(admin) {
     prune();
-    // Bound the in-memory store; a fresh login replaces this admin's older sessions.
-    for (const [key, session] of sessions) if (session.adminId === admin.id) sessions.delete(key);
     const token = randomBytes(32).toString('hex');
-    sessions.set(digest(token), { adminId: admin.id, createdAt: Date.now(), expiresAt: Date.now() + SESSION_TTL_MS });
-    savePersistedSessions(sessions);
+    const tokenHash = digest(token);
+    const createdAt = Date.now();
+    const expiresAt = createdAt + SESSION_TTL_MS;
+
+    // Bound the in-memory store; a fresh login replaces this admin's older sessions.
+    for (const [key, session] of sessions) {
+        if (session.adminId === admin.id) sessions.delete(key);
+    }
+    sessions.set(tokenHash, { adminId: admin.id, createdAt, expiresAt });
+
+    if (isMongoConnected() && collection) {
+        collection.deleteMany({ adminId: admin.id }).catch(() => {});
+        collection.updateOne(
+            { tokenHash },
+            { $set: { tokenHash, adminId: admin.id, createdAt, expiresAt, expiresAtDate: new Date(expiresAt) } },
+            { upsert: true }
+        ).catch(err => console.warn('[AUTH] MongoDB save session error:', err.message));
+    } else {
+        savePersistedSessions(sessions);
+    }
+
     return token;
 }
 
@@ -72,7 +118,11 @@ function getSession(req) {
     if (!session) return null;
     if (session.expiresAt <= Date.now()) {
         sessions.delete(key);
-        savePersistedSessions(sessions);
+        if (isMongoConnected() && collection) {
+            collection.deleteOne({ tokenHash: key }).catch(() => {});
+        } else {
+            savePersistedSessions(sessions);
+        }
         return null;
     }
     return session;
@@ -81,8 +131,13 @@ function getSession(req) {
 function deleteSession(req) {
     const token = requestToken(req);
     if (token) {
-        sessions.delete(digest(token));
-        savePersistedSessions(sessions);
+        const key = digest(token);
+        sessions.delete(key);
+        if (isMongoConnected() && collection) {
+            collection.deleteOne({ tokenHash: key }).catch(() => {});
+        } else {
+            savePersistedSessions(sessions);
+        }
     }
 }
 
@@ -100,7 +155,11 @@ function revokeOtherSessions(req, adminId) {
         sessions.get(currentKey).createdAt = Date.now();
         changed = true;
     }
-    if (changed) savePersistedSessions(sessions);
+    if (isMongoConnected() && collection) {
+        collection.deleteMany({ adminId, tokenHash: { $ne: currentKey } }).catch(() => {});
+    } else if (changed) {
+        savePersistedSessions(sessions);
+    }
 }
 
 function revokeAllSessions(adminId) {
@@ -111,7 +170,19 @@ function revokeAllSessions(adminId) {
             changed = true;
         }
     }
-    if (changed) savePersistedSessions(sessions);
+    if (isMongoConnected() && collection) {
+        collection.deleteMany({ adminId }).catch(() => {});
+    } else if (changed) {
+        savePersistedSessions(sessions);
+    }
 }
 
-module.exports = { createSession, getSession, deleteSession, revokeOtherSessions, revokeAllSessions };
+module.exports = { 
+    initSessions, 
+    createSession, 
+    getSession, 
+    deleteSession, 
+    revokeOtherSessions, 
+    revokeAllSessions 
+};
+

@@ -25,21 +25,24 @@ export default function RegistryPage({
   onEditRecord,
   onDeleteRecord,
   onExportCSV,
-  onExportJSON
+  onExportJSON,
+  companies = []
 }) {
   const [currentPage, setCurrentPage] = useState(1);
   const [activeModalRecord, setActiveModalRecord] = useState(null);
   const [recordToDelete, setRecordToDelete] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [companyFilter, setCompanyFilter] = useState("ALL");
 
-  const [prevFilters, setPrevFilters] = useState({ searchQuery, filterMode, registryDocType, expiryWindowDays });
+  const [prevFilters, setPrevFilters] = useState({ searchQuery, filterMode, registryDocType, expiryWindowDays, companyFilter });
   if (
     prevFilters.searchQuery !== searchQuery ||
     prevFilters.filterMode !== filterMode ||
     prevFilters.registryDocType !== registryDocType ||
-    prevFilters.expiryWindowDays !== expiryWindowDays
+    prevFilters.expiryWindowDays !== expiryWindowDays ||
+    prevFilters.companyFilter !== companyFilter
   ) {
-    setPrevFilters({ searchQuery, filterMode, registryDocType, expiryWindowDays });
+    setPrevFilters({ searchQuery, filterMode, registryDocType, expiryWindowDays, companyFilter });
     setCurrentPage(1);
   }
 
@@ -64,11 +67,22 @@ export default function RegistryPage({
         (item.firstName && item.firstName.toLowerCase().includes(query)) ||
         (item.givenNames && item.givenNames.toLowerCase().includes(query)) ||
         (item.memberName && item.memberName.toLowerCase().includes(query)) ||
+        (item.company && item.company.toLowerCase().includes(query)) ||
         fullName.includes(query) ||
         (item.nationality && item.nationality.toLowerCase().includes(query));
 
       if (!matchesSearch) return false;
       if (registryDocType !== "ALL" && (item.docType || "PASSPORT") !== registryDocType) return false;
+
+      if (companyFilter !== "ALL") {
+        const comp = (item.company || "").trim().toLowerCase();
+        if (companyFilter === "UNASSIGNED") {
+          if (comp) return false;
+        } else {
+          if (comp !== companyFilter.trim().toLowerCase()) return false;
+        }
+      }
+
       if (filterMode === "ALL") return true;
 
       const expiryDate = item.doe ? new Date(item.doe) : null;
@@ -78,7 +92,7 @@ export default function RegistryPage({
       if (filterMode === "VALID") return !isDateValid || expiryDate >= today;
       return true;
     });
-  }, [passports, searchQuery, filterMode, registryDocType, expiryWindowDays]);
+  }, [passports, searchQuery, filterMode, registryDocType, expiryWindowDays, companyFilter]);
 
   const sidebarPassports = useMemo(() => {
     const today = new Date();
@@ -192,6 +206,9 @@ export default function RegistryPage({
                   ? ` · Expiring in ${expiryWindowDays} days`
                   : ` · ${filterMode.replace("_", " ")}`
               )}
+              {companyFilter !== "ALL" && (
+                companyFilter === "UNASSIGNED" ? " · Unassigned company" : ` · ${companyFilter}`
+              )}
             </p>
           </div>
           <div className="db-actions">
@@ -222,10 +239,16 @@ export default function RegistryPage({
           docTypeCounts={docTypeCounts}
           filterMode={filterMode}
           onClearFilterMode={() => setFilterMode && setFilterMode("ALL")}
-          onResetAllFilters={onResetAllFilters}
+          onResetAllFilters={() => {
+            setCompanyFilter("ALL");
+            if (onResetAllFilters) onResetAllFilters();
+          }}
           expiryWindowDays={expiryWindowDays}
           setExpiryWindowDays={setExpiryWindowDays}
           onActivateExpiringSoon={() => setFilterMode && setFilterMode("EXPIRING_SOON")}
+          companies={companies}
+          companyFilter={companyFilter}
+          setCompanyFilter={setCompanyFilter}
         />
 
         <RegistryTable

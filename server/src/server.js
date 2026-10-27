@@ -5,7 +5,12 @@ require('dotenv').config({ path: path.join(SERVER_ROOT, '.env') });
 
 const app = require('./app');
 const { warmUpOcrWorker } = require('./services/ocr/worker');
+const { connectDB } = require('./config/db');
 const { ensureDefaultAdmin } = require('./repositories/admin.repository');
+const { initDB: initRegistryDB } = require('./repositories/registry.repository');
+const { initDB: initCompanyDB } = require('./repositories/company.repository');
+const { initSessions } = require('./services/session.service');
+const { initInsuranceAccounts } = require('./repositories/insurance-account.repository');
 
 const DEFAULT_PORT = 5058;
 const MAX_PORT = 5100;
@@ -20,9 +25,24 @@ function initializeRuntime() {
     process.on('unhandledRejection', err => {
         console.error('[FATAL-GUARD] unhandledRejection caught, server alive:', err && err.message ? err.message : err);
     });
-    ensureDefaultAdmin().catch(err => console.warn('[AUTH] Could not auto-initialize admin:', err.message));
+
+    (async () => {
+        try {
+            await connectDB();
+            await initRegistryDB();
+            await initCompanyDB();
+            await ensureDefaultAdmin();
+            await initSessions();
+            await initInsuranceAccounts();
+        } catch (err) {
+            console.warn('[SERVER] Database initialization warning:', err.message);
+        }
+    })();
+
     warmUpOcrWorker();
 }
+
+
 
 function startServer(port = process.env.PORT ? parseInt(process.env.PORT, 10) : DEFAULT_PORT) {
     initializeRuntime();

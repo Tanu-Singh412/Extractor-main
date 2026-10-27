@@ -1,5 +1,5 @@
 const { firstDateIn } = require('../helpers/dates');
-const { cleanAddress, correctIndianPassportNumber } = require('../helpers/fields');
+const { cleanAddress, cleanRelativeName, correctIndianPassportNumber } = require('../helpers/fields');
 const { normCountry } = require('../helpers/countries');
 const { isNameToken } = require('../helpers/names');
 
@@ -41,7 +41,7 @@ function extractVisualFields(result, text) {
                 let currentAddrLines = [];
                 if (addrMatch && addrMatch[1].trim()) {
                     const firstPart = addrMatch[1].trim();
-                    if (firstPart.length > 2) currentAddrLines.push(firstPart);
+                    if (firstPart.length > 2 && /[A-Za-z0-9]{3,}/.test(firstPart)) currentAddrLines.push(firstPart);
                 }
                 for (let k = 1; k <= 6; k++) {
                     const nxt = lines[i + k];
@@ -50,6 +50,13 @@ function extractVisualFields(result, text) {
                     if (nxtUp.includes('<')) break;
                     if (/(PASSPORT|DOB|ISSUE|EXPIR|NATIONALIT|SEX|FATHER|MOTHER|SPOUSE|PLACE\s*OF\s*BIRTH|FILE\s*NO|OLD\s*PASSPORT)/i.test(nxtUp)) break;
                     if (nxt.trim().length < 3) continue;
+
+                    // Filter out lines that are background security print noise (no address keywords and no substantial alpha tokens)
+                    const cleanTokens = nxt.replace(/[^A-Za-z0-9]/g, ' ').split(/\s+/).filter(Boolean);
+                    const hasAddressKeyword = /(GALI|ROAD|COLONY|NAGAR|SECTOR|HOUSE|FLAT|APARTMENT|VILLAGE|PO|TEHSIL|DISTT|DISTRICT|NEAR|POST|PIN|\d{6}|INDIA|PRADESH|DELHI|STREET|LANE|MARG|FLOOR|BLOCK|NO\b)/i.test(nxtUp);
+                    const longWords = cleanTokens.filter(w => w.length >= 4);
+                    if (!hasAddressKeyword && longWords.length < 2) continue;
+
                     currentAddrLines.push(nxt.trim());
                     // If this line contains PIN code or country, it marks the end of the address
                     if (/\b(?:PIN\s*:?\s*)?\d{6}\b/.test(nxtUp) || /INDIA\b/.test(nxtUp)) {
@@ -59,7 +66,7 @@ function extractVisualFields(result, text) {
                 if (currentAddrLines.length > 0) {
                     const rawAddr = currentAddrLines.join(', ');
                     const cleanedAddr = rawAddr
-                        .replace(/\b\w{1,2}\b(?=,|$)/g, '')
+                        .replace(/[^\w\s,.\/-]/g, '')
                         .replace(/\s+,/g, ',')
                         .replace(/,+/g, ', ')
                         .replace(/[()\\]/g, '')
@@ -68,7 +75,7 @@ function extractVisualFields(result, text) {
                     result.address = cleanAddress(cleanedAddr);
                 }
             }
-            const isKeyword = (s) => /(FATHER|MOTHER|SPOUSE|MARRIED|OLD|PREVIOUS|PASSPORT|FILE|DOCUMENT|NO|PLACE|ISSUE|EXPIR|ADDRESS|PIN|DATE|NAME|BIRTH)/.test(s);
+            const isKeyword = (s) => /(FATHER|MOTHER|SPOUSE|MARRIED|OLD|PREVIOUS|PASSPORT|FILE|DOCUMENT|NO\b|PLACE|ISSUE|EXPIR|ADDRESS|PIN|DATE|NAME|BIRTH)/.test(s);
 
             // Place of Birth
             if (!extraFields.placeOfBirth && /(?:PLACE|PACO|PICO)\s*OF\s*BIRTH|LIEU\s*DE\s*NAISSANCE|LISU\s*D[EÉ]\s*NAISS/i.test(up)) {
@@ -90,41 +97,51 @@ function extractVisualFields(result, text) {
             // "Kas of Ft", "PRT 1 Kas of Ft", "Geir sa ULL", "Name of Fat" etc.)
             const FATHER_LABEL_GARBAGE = /^(?:LEGAL\s*GUARDIAN|LEGAL|GUARDIAN|NAME|FA|FT|FATH|OF|FATHER|NOM)$/i;
             if (!extraFields.fatherName && /(FATHER|FATH[A-Z]*\s*(?:NAME)?|MAM\s*OF\s*FA|FO.?\s*A|KAS\s*OF\s*FT|GEIR\s*SA|NIVE\s*OF\s*FA|NAME\s*OF\s*FAT)/i.test(up)) {
-                const m = up.match(/(?:FATHER|FATH[A-Z]*)(?:\s*(?:NAME|\/\s*LEGAL\s*GUARDIAN))?\s*[:]?\s*(.*)/i);
-                let captured = m && m[1] ? m[1].replace(/[^A-Z\s]/gi, '').trim() : '';
-                captured = captured.replace(/^(?:LEGAL\s*GUARDIAN|GUARDIAN)\b/i, '').trim();
-                if (captured.length >= 5 && captured.replace(/\s/g, '').length >= 4 && !FATHER_LABEL_GARBAGE.test(captured)) {
-                    extraFields.fatherName = captured;
-                } else {
-                    for (let j = 1; j <= 2; j++) {
-                        const nxt = (lines[i + j] || '').toUpperCase();
-                        if (isKeyword(nxt) || nxt.includes('<')) break;
-                        const cleaned = nxt.replace(/[^A-Z\s]/gi, '').trim();
-                        // Make sure there is at least one word of length >= 4 to avoid garbage
-                        const hasRealWord = cleaned.split(/\s+/).some(w => w.length >= 4);
-                        if (cleaned.length >= 5 && hasRealWord && !FATHER_LABEL_GARBAGE.test(cleaned)) {
-                            extraFields.fatherName = cleaned;
-                            break;
-                        }
+                // First check if the NEXT line contains the father's name (standard on Indian passports)
+                let foundNext = false;
+                for (let j = 1; j <= 2; j++) {
+                    const nxt = (lines[i + j] || '').toUpperCase();
+                    if (isKeyword(nxt) || nxt.includes('<')) break;
+                    const cleaned = nxt.replace(/[^A-Z\s]/gi, '').trim();
+                    const words = cleaned.split(/\s+/).filter(w => w.length >= 3);
+                    if (words.length >= 2 && !FATHER_LABEL_GARBAGE.test(cleaned)) {
+                        extraFields.fatherName = cleanRelativeName(cleaned);
+                        foundNext = true;
+                        break;
+                    }
+                }
+                if (!foundNext) {
+                    const m = up.match(/(?:FATHER|FATH[A-Z]*)(?:\s*(?:NAME|\/\s*LEGAL\s*GUARDIAN))?\s*[:]?\s*(.*)/i);
+                    let captured = m && m[1] ? m[1].replace(/[^A-Z\s]/gi, '').trim() : '';
+                    captured = captured.replace(/^(?:LEGAL\s*GUARDIAN|GUARDIAN)\b/i, '').trim();
+                    const words = captured.split(/\s+/).filter(w => w.length >= 4);
+                    if (words.length >= 2 && !FATHER_LABEL_GARBAGE.test(captured)) {
+                        extraFields.fatherName = cleanRelativeName(captured);
                     }
                 }
             }
-            // --- Fallback for father/mother when explicit labels are missing ---
-            // (removed — the generic family-name fallback below handles this properly)
             // Mother name — also catches garbled OCR variants:
             // "Nive of Motes", "Name of Mothr", "Mime of Modher", "MOTHE", "MOTES", "NIVE OF MO"
             const MOTHER_PATTERN = /(MOTHER|MODHER|MOTHE[RS]?|MOTES|MOTHR|NIVE\s+OF\s+MO|NAME\s+OF\s+MO|MIME\s+OF)/i;
             if (!extraFields.motherName && MOTHER_PATTERN.test(up)) {
-                // Try to get inline value (after the label keyword)
-                const m = up.match(/(?:MOTHER|MODHER|MOTHE[RS]?|MOTES|MOTHR|NIVE\s+OF\s+MO|NAME\s+OF\s+MO|MIME\s+OF)(?:[^A-Z]*(?:NAME|AVES|ARES))?\s*[:]?\s*(.*)/i);
-                const captured = m && m[1] ? m[1].replace(/[^A-Z\s]/gi, '').trim() : '';
-                if (captured.length >= 5) {
-                    extraFields.motherName = captured;
-                } else {
-                    // Use next non-keyword line
-                    const nxt = nextLine(i);
-                    if (nxt && !isKeyword(nxt)) {
-                        extraFields.motherName = nxt.replace(/[^A-Z\s]/gi, '').trim();
+                let foundNext = false;
+                for (let j = 1; j <= 2; j++) {
+                    const nxt = (lines[i + j] || '').toUpperCase();
+                    if (isKeyword(nxt) || nxt.includes('<')) break;
+                    const cleaned = nxt.replace(/[^A-Z\s]/gi, '').trim();
+                    const words = cleaned.split(/\s+/).filter(w => w.length >= 3);
+                    if (words.length >= 2) {
+                        extraFields.motherName = cleanRelativeName(cleaned);
+                        foundNext = true;
+                        break;
+                    }
+                }
+                if (!foundNext) {
+                    const m = up.match(/(?:MOTHER|MODHER|MOTHE[RS]?|MOTES|MOTHR|NIVE\s+OF\s+MO|NAME\s+OF\s+MO|MIME\s+OF)(?:[^A-Z]*(?:NAME|AVES|ARES))?\s*[:]?\s*(.*)/i);
+                    const captured = m && m[1] ? m[1].replace(/[^A-Z\s]/gi, '').trim() : '';
+                    const words = captured.split(/\s+/).filter(w => w.length >= 4);
+                    if (words.length >= 2) {
+                        extraFields.motherName = cleanRelativeName(captured);
                     }
                 }
 
@@ -154,18 +171,24 @@ function extractVisualFields(result, text) {
             const SPOUSE_PATTERN = /(SPOUSE|MARRIED\s*TO|SASS|SPOASS|SPOAS[A-Z]*|SPOUSA|SPOTS|SPOUS|PEI\s+OT\s+SP|AME\s+SPOT|NAME\s+OF\s+SP|FA\s+AME|AME\s+SPO)/i;
             const SPOUSE_LABEL_GARBAGE = /^(SPOTS|SPOUS|SPOA|SASS|LE|LA|F|FA|AME|IE|SP|LI|LE\s*F)$/i;
             if (!extraFields.spouseName && SPOUSE_PATTERN.test(up)) {
-                const m = up.match(/(?:SPOUSE|MARRIED\s*TO|SASS|SPOASS|SPOAS[A-Z]*|SPOUSA|SPOTS|SPOUS|PEI\s+OT\s+SP|AME\s+SPOT|NAME\s+OF\s+SP|FA\s+AME|AME\s+SPO)\s*[^A-Z]*[:]?\s*(.*)/i);
-                const rawCapture = m && m[1] ? m[1].replace(/[^A-Z\s]/gi, '').trim() : '';
-                // Only use inline capture if it looks like a real name (2+ words each >= 4 chars)
-                const tokens = rawCapture.split(/\s+/).filter(t => t.length >= 4);
-                const looksLikeName = tokens.length >= 2 && !SPOUSE_LABEL_GARBAGE.test(rawCapture);
-                if (looksLikeName) {
-                    extraFields.spouseName = rawCapture;
-                } else {
-                    // Label line — name is on the next non-keyword line
-                    const nxt = nextLine(i);
-                    if (nxt && !isKeyword(nxt)) {
-                        extraFields.spouseName = nxt.replace(/[^A-Z\s]/gi, '').trim();
+                let foundNext = false;
+                for (let j = 1; j <= 2; j++) {
+                    const nxt = (lines[i + j] || '').toUpperCase();
+                    if (isKeyword(nxt) || nxt.includes('<')) break;
+                    const cleaned = nxt.replace(/[^A-Z\s]/gi, '').trim();
+                    const words = cleaned.split(/\s+/).filter(w => w.length >= 3);
+                    if (words.length >= 2 && !SPOUSE_LABEL_GARBAGE.test(cleaned)) {
+                        extraFields.spouseName = cleanRelativeName(cleaned);
+                        foundNext = true;
+                        break;
+                    }
+                }
+                if (!foundNext) {
+                    const m = up.match(/(?:SPOUSE|MARRIED\s*TO|SASS|SPOASS|SPOAS[A-Z]*|SPOUSA|SPOTS|SPOUS|PEI\s+OT\s+SP|AME\s+SPOT|NAME\s+OF\s+SP|FA\s+AME|AME\s+SPO)\s*[^A-Z]*[:]?\s*(.*)/i);
+                    const rawCapture = m && m[1] ? m[1].replace(/[^A-Z\s]/gi, '').trim() : '';
+                    const tokens = rawCapture.split(/\s+/).filter(t => t.length >= 4);
+                    if (tokens.length >= 2 && !SPOUSE_LABEL_GARBAGE.test(rawCapture)) {
+                        extraFields.spouseName = cleanRelativeName(rawCapture);
                     }
                 }
             }

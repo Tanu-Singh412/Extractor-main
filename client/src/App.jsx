@@ -8,6 +8,7 @@ import ToastContainer from "./components/common/ToastContainer";
 import { useAuth } from "./hooks/useAuth";
 import { useToast } from "./hooks/useToast";
 import { useDocuments } from "./hooks/useDocuments";
+import { useCompanies } from "./hooks/useCompanies";
 
 const getInitialRoute = () => {
   const path = window.location.pathname.toLowerCase();
@@ -30,6 +31,7 @@ export default function App() {
     handleUnauthenticated,
     addToast
   );
+  const { companies, addCompany, editCompany, removeCompany } = useCompanies(isAuthenticated, addToast);
 
   const [currentRoute, setCurrentRoute] = useState(getInitialRoute);
   const [editingRecord, setEditingRecord] = useState(null);
@@ -235,6 +237,10 @@ export default function App() {
             onClearEdit={() => setEditingRecord(null)}
             onRecordSaved={loadPassports}
             addToast={addToast}
+            companies={companies}
+            onAddCompany={addCompany}
+            onEditCompany={editCompany}
+            onDeleteCompany={removeCompany}
           />
         </div>
 
@@ -261,6 +267,7 @@ export default function App() {
             onDeleteRecord={deleteRecord}
             onExportCSV={exportCSV}
             onExportJSON={exportJSON}
+            companies={companies}
           />
         </div>
       </div>

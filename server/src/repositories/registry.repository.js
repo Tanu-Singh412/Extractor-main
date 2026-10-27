@@ -1,6 +1,10 @@
 const fs = require('fs');
 const path = require('path');
+const { connectDB, getCollection, isMongoConnected: checkMongoConnected } = require('../config/db');
 const { REGISTRY_FILE: DB_PATH } = require('../config/paths');
+
+let collection = null;
+let isMongoConnected = false;
 
 function loadDB() {
     try {
@@ -10,6 +14,7 @@ function loadDB() {
 }
 
 function saveDB(records) {
+    if (isMongoConnected) return; // Stored in MongoDB; no local file needed
     try {
         const dir = path.dirname(DB_PATH);
         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -18,6 +23,29 @@ function saveDB(records) {
 }
 
 let dbRecords = loadDB();
+
+async function initDB() {
+    await connectDB();
+    if (!checkMongoConnected()) {
+        isMongoConnected = false;
+        return;
+    }
+
+    try {
+        collection = getCollection('passports');
+        await collection.createIndex({ id: 1 }, { unique: true });
+        isMongoConnected = true;
+
+        // When connected to MongoDB, load records from the MongoDB database
+        const mongoDocs = await collection.find({}).sort({ created_at: -1, _id: -1 }).toArray();
+        dbRecords = mongoDocs.map(({ _id, ...doc }) => doc);
+        console.log(`[DB] Loaded ${dbRecords.length} records from MongoDB collection "passports".`);
+    } catch (err) {
+        console.warn(`[DB] MongoDB passports setup failed (${err.message}).`);
+        isMongoConnected = false;
+    }
+}
+
 
 function listRecords() { return dbRecords; }
 
@@ -72,9 +100,18 @@ function createRecord(fields) {
         throw err;
     }
     const { previewImage: _unused, ...cleanFields } = fields || {};
-    const newRecord = { id: `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`, ...cleanFields };
+    const newRecord = { 
+        id: `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`, 
+        created_at: new Date().toISOString(),
+        ...cleanFields 
+    };
     dbRecords.push(newRecord);
     saveDB(dbRecords);
+    if (isMongoConnected && collection) {
+        collection.insertOne({ ...newRecord }).catch(err => {
+            console.warn('[DB] MongoDB insert error:', err.message);
+        });
+    }
     return newRecord;
 }
 
@@ -91,6 +128,11 @@ function updateRecord(id, fields) {
     const { previewImage: _unused, ...cleanFields } = fields || {};
     dbRecords[idx] = { ...dbRecords[idx], ...cleanFields, id };
     saveDB(dbRecords);
+    if (isMongoConnected && collection) {
+        collection.updateOne({ id }, { $set: cleanFields }).catch(err => {
+            console.warn('[DB] MongoDB update error:', err.message);
+        });
+    }
     return dbRecords[idx];
 }
 
@@ -99,7 +141,25 @@ function deleteRecord(id) {
     dbRecords = dbRecords.filter(r => r.id !== id);
     if (dbRecords.length === initialLen) return false;
     saveDB(dbRecords);
+    if (isMongoConnected && collection) {
+        collection.deleteOne({ id }).catch(err => {
+            console.warn('[DB] MongoDB delete error:', err.message);
+        });
+    }
     return true;
 }
 
-module.exports = { listRecords, createRecord, updateRecord, deleteRecord, findDuplicateIdentifier };
+function isUsingMongo() {
+    return isMongoConnected;
+}
+
+module.exports = { 
+    initDB,
+    isUsingMongo,
+    listRecords, 
+    createRecord, 
+    updateRecord, 
+    deleteRecord, 
+    findDuplicateIdentifier 
+};
+

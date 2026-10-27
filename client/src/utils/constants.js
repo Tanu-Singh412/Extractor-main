@@ -1,6 +1,7 @@
 // Default empty form template for passport/insurance fields
 export const EMPTY_FORM = {
   docType: "PASSPORT",
+  company: "",
   passportNo: "",
   issuingCountry: "",
   nationality: "",

@@ -178,3 +178,52 @@ export async function downloadExport(format, options = {}) {
   a.remove();
   window.URL.revokeObjectURL(url);
 }
+
+export async function fetchCompanies() {
+  const res = await fetch(`${API_BASE}/companies`, {
+    credentials: "include"
+  });
+  if (res.status === 401) throw new Error("UNAUTHORIZED");
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+  return data.companies || [];
+}
+
+export async function createCompany(name) {
+  const res = await fetch(`${API_BASE}/companies`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+    credentials: "include"
+  });
+  if (res.status === 401) throw new Error("UNAUTHORIZED");
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.message || "Failed to create company");
+  return data.company;
+}
+
+export async function updateCompany(id, name) {
+  const res = await fetch(`${API_BASE}/companies/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+    credentials: "include"
+  });
+  if (res.status === 401) throw new Error("UNAUTHORIZED");
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.message || "Failed to update company");
+  return data.company;
+}
+
+export async function deleteCompany(id) {
+  const res = await fetch(`${API_BASE}/companies/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    credentials: "include"
+  });
+  if (res.status === 401) throw new Error("UNAUTHORIZED");
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.message || "Failed to delete company");
+  return true;
+}
+
+

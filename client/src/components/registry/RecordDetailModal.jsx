@@ -17,6 +17,7 @@ export default function RecordDetailModal({
   if (isPassportDoc) {
     rows = [
       ["Passport Number", record.passportNo],
+      ["Company", record.company ? `${record.company}` : "—"],
       ["Issuing Country", record.issuingCountry],
       ["First Name", record.firstName || record.givenNames],
       ["Last Name", record.lastName || record.surname],
@@ -103,7 +104,7 @@ export default function RecordDetailModal({
   }
 
   const handledKeys = new Set([
-    "id", "createdAt", "docType", "previewImage", "passportNo", "issuingCountry",
+    "id", "createdAt", "docType", "previewImage", "passportNo", "company", "issuingCountry",
     "firstName", "givenNames", "lastName", "surname", "nationality", "sex", "dob",
     "placeOfBirth", "issueDate", "doe", "placeOfIssue", "oldPassportNo", "fileNo",
     "address", "fatherName", "motherName", "spouseName", "insuranceType", "policyNo",

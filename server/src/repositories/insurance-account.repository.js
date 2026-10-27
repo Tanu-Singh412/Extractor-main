@@ -1,10 +1,9 @@
 const fs = require('fs');
+const { connectDB, getCollection, isMongoConnected } = require('../config/db');
 const { DATA_DIR, INSURANCE_ACCOUNTS_FILE: ACCOUNTS_FILE } = require('../config/paths');
 
-// Ensure data directory exists
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-}
+let accountsCache = [];
+let collection = null;
 
 function loadAccounts() {
   try {
@@ -17,11 +16,34 @@ function loadAccounts() {
   }
 }
 
-function saveAccount(account) {
-  const accounts = loadAccounts();
-  accounts.push({ id: Date.now(), ...account });
+accountsCache = loadAccounts();
+
+async function initInsuranceAccounts() {
+  await connectDB();
+  if (!isMongoConnected()) return;
   try {
-    fs.writeFileSync(ACCOUNTS_FILE, JSON.stringify(accounts, null, 2), 'utf-8');
+    collection = getCollection('insurance_accounts');
+    const docs = await collection.find({}).toArray();
+    if (docs.length > 0) {
+      accountsCache = docs.map(({ _id, ...doc }) => doc);
+    }
+  } catch (e) {
+    console.warn('[INSURANCE] MongoDB setup warning:', e.message);
+  }
+}
+
+function saveAccount(account) {
+  const newAccount = { id: Date.now(), ...account };
+  accountsCache.push(newAccount);
+  if (isMongoConnected() && collection) {
+    collection.insertOne({ ...newAccount }).catch(e => {
+      console.warn('[INSURANCE] MongoDB save error:', e.message);
+    });
+    return true;
+  }
+  try {
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(ACCOUNTS_FILE, JSON.stringify(accountsCache, null, 2), 'utf-8');
     return true;
   } catch (e) {
     console.warn('[INSURANCE] Failed to save account:', e.message);
@@ -30,7 +52,8 @@ function saveAccount(account) {
 }
 
 function getAllAccounts() {
-  return loadAccounts();
+  return accountsCache;
 }
 
-module.exports = { saveAccount, getAllAccounts };
+module.exports = { initInsuranceAccounts, saveAccount, getAllAccounts };
+

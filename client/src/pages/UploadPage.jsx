@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useRef } from "react";
 import FileUploadZone from "../components/upload/FileUploadZone";
 import DocumentPreview from "../components/upload/DocumentPreview";
-import OcrProgressBar from "../components/upload/OcrProgressBar";
+import AILoadingState from "../components/upload/AILoadingState";
 import VerificationForm from "../components/upload/VerificationForm";
 import ConfirmSaveModal from "../components/upload/ConfirmSaveModal";
-
 import * as api from "../services/api";
 import { generateMockPassport } from "../utils/mockGenerator";
 import {
@@ -18,18 +17,115 @@ import {
 import { validateDocumentForm } from "../utils/validation";
 import { applyProperNameHandling } from "../utils/names";
 
+function getExtractionStepsTemplate(docType, fileCount = 1) {
+  const isInsurance = docType === "INSURANCE";
+  const pagesText = fileCount > 1 ? `across ${fileCount} pages` : "document";
+
+  if (isInsurance) {
+    return [
+      {
+        id: "preprocess",
+        label: "Preparing insurance paper",
+        status: "pending",
+        detail: [
+          `reading uploaded policy ${pagesText}`,
+          "enhancing text and table clarity",
+          "identifying insurance company",
+        ],
+      },
+      {
+        id: "ocr",
+        label: "Reading document text",
+        status: "pending",
+        detail: [
+          "scanning policy pages",
+          "locating vehicle & policy sections",
+          "reading policyholder information",
+        ],
+      },
+      {
+        id: "parse",
+        label: "Finding policy & vehicle details",
+        status: "pending",
+        detail: [
+          "finding policy number & provider",
+          "reading policyholder name & contact",
+          "gathering vehicle number & engine specs",
+        ],
+      },
+      {
+        id: "verify",
+        label: "Checking details & filling form",
+        status: "pending",
+        detail: [
+          "verifying policy period & dates",
+          "verifying vehicle details",
+          "ready for your review",
+        ],
+      },
+    ];
+  }
+
+  return [
+    {
+      id: "preprocess",
+      label: "Preparing document & image",
+      status: "pending",
+      detail: [
+        "checking document photo & angle",
+        "enhancing text clarity & lighting",
+        fileCount > 1 ? "identifying Page 1 (photo) & Page 2 (address)" : "identifying front and back pages",
+      ],
+    },
+    {
+      id: "ocr",
+      label: "Reading document text",
+      status: "pending",
+      detail: [
+        "scanning words and numbers",
+        "finding name & passport sections",
+        "reading bottom code lines",
+      ],
+    },
+    {
+      id: "parse",
+      label: "Finding passport information",
+      status: "pending",
+      detail: [
+        "reading full name & passport number",
+        "reading date of birth & validity",
+        "gathering address & parents' names",
+      ],
+    },
+    {
+      id: "verify",
+      label: "Checking details & filling form",
+      status: "pending",
+      detail: [
+        "verifying dates and numbers",
+        "confirming accurate details",
+        "ready for your review",
+      ],
+    },
+  ];
+}
+
+
 export default function UploadPage({
   editingRecord,
   existingRecords = [],
   onClearEdit,
   onRecordSaved,
-  addToast
+  addToast,
+  companies = [],
+  onAddCompany,
+  onEditCompany,
+  onDeleteCompany
 }) {
   const [documentType, setDocumentType] = useState("PASSPORT");
   const [isScanning, setIsScanning] = useState(false);
-  const [ocrProgressText, setOcrProgressText] = useState("Readying Engine...");
-  const [ocrProgressPercent, setOcrProgressPercent] = useState(0);
-  const [showOcrProgress, setShowOcrProgress] = useState(false);
+  const [agentSteps, setAgentSteps] = useState(null);
+  const [showAILoader, setShowAILoader] = useState(false);
   const [previewImage, setPreviewImage] = useState("");
   const [multiPreviews, setMultiPreviews] = useState([]);
   const [formState, setFormState] = useState(EMPTY_FORM);
@@ -37,6 +133,7 @@ export default function UploadPage({
   const [formErrors, setFormErrors] = useState({});
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+
 
   const fileInputRef = useRef(null);
   const intervalRef = useRef(null);
@@ -56,7 +153,7 @@ export default function UploadPage({
     trackedBlobUrlsRef.current.forEach((url) => {
       try {
         URL.revokeObjectURL(url);
-      } catch {}
+      } catch { }
     });
     trackedBlobUrlsRef.current = [];
   };
@@ -130,7 +227,8 @@ export default function UploadPage({
     setEditId(null);
     setPreviewImage("");
     setMultiPreviews([]);
-    setShowOcrProgress(false);
+    setShowAILoader(false);
+    setAgentSteps(null);
     setFormErrors({});
     setShowConfirmModal(false);
     if (fileInputRef.current) fileInputRef.current.value = "";
@@ -142,29 +240,49 @@ export default function UploadPage({
     if (!files.length) return;
 
     setIsScanning(true);
-    setShowOcrProgress(true);
-    setOcrProgressPercent(15);
-    const docLabel = documentType === "INSURANCE" ? "insurance" : "passport";
-    setOcrProgressText(files.length > 1 ? `Uploading ${files.length} ${docLabel} pages...` : "Uploading document...");
+    setShowAILoader(true);
+
+    const template = getExtractionStepsTemplate(documentType, files.length);
+    let activeSteps = template.map((s, idx) => {
+      if (idx === 0) {
+        return { ...s, status: "running", detail: [s.detail[0]] };
+      }
+      return { ...s, status: "pending", detail: [] };
+    });
+    setAgentSteps(activeSteps);
+
+    let currentStepIdx = 0;
+    let currentLineIdx = 1;
 
     try {
       if (intervalRef.current) clearInterval(intervalRef.current);
       intervalRef.current = setInterval(() => {
-        setOcrProgressPercent(prev => {
-          if (prev >= 90) {
-            if (intervalRef.current) clearInterval(intervalRef.current);
-            return 90;
+        setAgentSteps(prevSteps => {
+          if (!prevSteps) return prevSteps;
+          const updated = prevSteps.map(s => ({ ...s, detail: [...(s.detail || [])] }));
+          const runningStep = updated[currentStepIdx];
+          if (!runningStep) return prevSteps;
+
+          const stepTemplate = template[currentStepIdx];
+          const fullLines = stepTemplate ? stepTemplate.detail : [];
+
+          if (currentLineIdx < fullLines.length) {
+            runningStep.detail = fullLines.slice(0, currentLineIdx + 1);
+            currentLineIdx++;
+            return updated;
+          } else if (currentStepIdx < 2) {
+            // Complete current step and transition to next
+            runningStep.status = "done";
+            currentStepIdx++;
+            currentLineIdx = 1;
+            const nextStep = updated[currentStepIdx];
+            if (nextStep) {
+              nextStep.status = "running";
+              nextStep.detail = (template[currentStepIdx].detail || []).slice(0, 1);
+            }
+            return updated;
           }
-          return Math.min(prev + 15, 90);
-        });
-        setOcrProgressText(prev => {
-          if (prev.startsWith("Uploading")) return "Initializing Extraction Engine...";
-          if (prev === "Initializing Extraction Engine...") {
-            return files.length > 1 ? "OCR scanning all pages..." : "Extracting text from document...";
-          }
-          if (prev.startsWith("OCR scanning") || prev.startsWith("Extracting text")) return "Parsing document fields...";
-          if (prev === "Parsing document fields...") return files.length > 1 ? "Merging data from all pages..." : "Finalizing extraction...";
-          return "Finalizing extraction...";
+          return prevSteps;
         });
       }, 700);
 
@@ -179,9 +297,6 @@ export default function UploadPage({
       if (intervalRef.current) clearInterval(intervalRef.current);
 
       if (resData.success) {
-        setOcrProgressPercent(100);
-        setOcrProgressText(files.length > 1 ? `Merged ${resData.mergedFromCount || files.length} pages — extraction complete!` : "Extraction complete!");
-
         // Both single and merged responses return a unified `data` object
         setEditId(null);
         if (onClearEdit) onClearEdit();
@@ -191,6 +306,43 @@ export default function UploadPage({
 
         const { firstName: cleanedFirstName, lastName: cleanedLastName, memberName: memberNameVal } =
           applyProperNameHandling(info, detectedDocType);
+
+        const isIns = detectedDocType === "INSURANCE";
+        const parseLogs = isIns
+          ? [
+            `Policy Number: ${info.policyNo || "Found"}`,
+            `Policyholder: ${memberNameVal || info.memberName || "Found"}`,
+            `Vehicle / Motor: ${info.vehicleNo || info.engineNo || "Details found"}`,
+          ]
+          : [
+            `Passport Number: ${info.passportNo || "Found"}`,
+            `Full Name: ${(cleanedFirstName || "") + " " + (cleanedLastName || "")}`.trim() || "Found",
+            `Birth Date & Code: Verified`,
+          ];
+
+        const verifyLogs = isIns
+          ? [
+            `Valid: ${info.doi || "Start"} to ${info.doe || "Expiry"}`,
+            "Coverage & vehicle details checked",
+            "Form filled and ready to review",
+          ]
+          : [
+            `Valid: ${info.doi || "Issue"} to ${info.doe || "Expiry"}`,
+            `Address & Family details: Added`,
+            "Form filled and ready to review",
+          ];
+
+
+        setAgentSteps(prev => {
+          if (!prev) return prev;
+          return prev.map((s, idx) => {
+            if (idx === 0) return { ...s, status: "done", detail: template[0].detail };
+            if (idx === 1) return { ...s, status: "done", detail: template[1].detail };
+            if (idx === 2) return { ...s, status: "done", detail: parseLogs };
+            if (idx === 3) return { ...s, status: "done", detail: verifyLogs };
+            return { ...s, status: "done" };
+          });
+        });
 
         setFormState({
           ...EMPTY_FORM,
@@ -221,17 +373,36 @@ export default function UploadPage({
         const pagesMsg = files.length > 1 ? ` (from ${files.length} pages)` : "";
         addToast(`${label} data extracted successfully!${pagesMsg}`, "success");
       } else {
+        setAgentSteps(prev => {
+          if (!prev) return prev;
+          return prev.map(s => {
+            if (s.status === "running") {
+              return { ...s, status: "error", detail: [...(s.detail || []), "Server could not parse document structure."] };
+            }
+            return s;
+          });
+        });
         addToast("Server could not parse the document(s). Please verify manually.", "error");
       }
     } catch (err) {
       console.error("Scan error:", err);
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      setAgentSteps(prev => {
+        if (!prev) return prev;
+        return prev.map(s => {
+          if (s.status === "running") {
+            return { ...s, status: "error", detail: [...(s.detail || []), `Error: ${err.message || "Extraction failed"}`] };
+          }
+          return s;
+        });
+      });
       addToast(err.message || "OCR upload error. Check backend connections.", "error");
     } finally {
       if (intervalRef.current) clearInterval(intervalRef.current);
       setIsScanning(false);
-      setTimeout(() => setShowOcrProgress(false), 1000);
     }
   };
+
 
   const processUploadedFiles = (files) => {
     if (!files?.length) return;
@@ -394,11 +565,13 @@ export default function UploadPage({
               multiPreviews={multiPreviews}
             />
 
-            <OcrProgressBar
-              show={showOcrProgress}
-              progressPercent={ocrProgressPercent}
-              progressText={ocrProgressText}
-            />
+            {showAILoader && (
+              <AILoadingState
+                steps={agentSteps}
+                documentType={documentType}
+                collapseWhenDone={false}
+              />
+            )}
 
             {documentType === "PASSPORT" && (
               <div className="demo-trigger-wrapper">
@@ -433,6 +606,10 @@ export default function UploadPage({
             isScanning={isScanning || isSaving}
             editId={editId}
             formErrors={formErrors}
+            companies={companies}
+            onAddCompany={onAddCompany}
+            onEditCompany={onEditCompany}
+            onDeleteCompany={onDeleteCompany}
           />
         </div>
       </div>

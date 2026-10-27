@@ -101,8 +101,10 @@ function parseLine1(raw, expectCountry) {
     let l = String(raw).toUpperCase().replace(/[«‹\[\]]/g, '<').replace(/\s+/g, '').replace(/[^A-Z0-9<]/g, '');
     if (!l) return null;
 
-    // Normalise OCR chevron misreads: K<, <K, KK, <C, C<
-    l = l.replace(/(?:K<|<K|KK|K{2,}|<C|C<)/g, '<<');
+    // Normalise repeated filler characters and OCR chevron misreads
+    l = l.replace(/(.)\1{3,}/g, (m, c) => 'CLKSEIVXZ10'.includes(c) ? '<'.repeat(m.length) : m);
+    l = l.replace(/(?<=<)[KC]+(?=<|$)/g, '<');
+    l = l.replace(/<[KC]+(?=<)/g, '<<');
 
     // Strip leading noise if P< appears slightly shifted
     const pShift = l.indexOf('P<');
@@ -137,7 +139,8 @@ function parseLine1(raw, expectCountry) {
     const toks = name.split(/<+/).filter(Boolean);
     const sur = toks[0] || '';
     if (sur.length < 2) return null;
-    const giv = toks.slice(1).join(' ').replace(/[^A-Z\s]/g, '').trim(); 
+    const givToks = toks.slice(1).filter(t => !/^[LKXIZ10FE<]+$/i.test(t) && !(new Set(t).size <= 2 && t.length >= 4));
+    const giv = givToks.join(' ').replace(/[^A-Z\s]/g, '').trim();
     return { country, surname: sur, givenNames: giv };
 }
 

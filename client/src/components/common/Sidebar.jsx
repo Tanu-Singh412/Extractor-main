@@ -151,7 +151,6 @@ export default function Sidebar({
             <i className="fa-solid fa-arrow-right-from-bracket"></i>
             <span>Sign out</span>
           </button>
-          <div className="sidebar-version-tag">v2.1.0</div>
         </div>
       </aside>
 

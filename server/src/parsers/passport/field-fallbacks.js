@@ -62,25 +62,42 @@ function applyFieldFallbacks(result, rawText, { lines, visualSurname, visualGive
     // Old passport number — label-anchored
     if (!result.oldPassportNo) {
         const opM = rawUpper.match(/(?:OLD|PREVIOUS|FORMER|PASION)\s*(?:PASSPORT|PP)?\s*(?:NO|NUMBER|NUM)?\s*[:\-]?\s*([A-Z][A-Z0-9]{5,13})/);
-        if (opM && opM[1]) result.oldPassportNo = correctIndianPassportNumber(opM[1].trim());
+        if (opM && opM[1] && !/^(?:PASSPORT|P455P0R7|WITH|DATE|AND|PLACE|ISSU|NONE|NIL)$/i.test(opM[1])) {
+            result.oldPassportNo = correctIndianPassportNumber(opM[1].trim());
+        }
     }
     // Also: old passport no often appears as "alphanumeric + date" pattern on one line
     if (!result.oldPassportNo) {
         const opM2 = rawUpper.match(/\b([A-Z][A-Z0-9]{6,8})\b\s+\d{2}[\/-]\d{2}[\/-]\d{4}/);
-        if (opM2 && opM2[1] && opM2[1] !== result.passportNo) result.oldPassportNo = correctIndianPassportNumber(opM2[1]);
+        if (opM2 && opM2[1] && opM2[1] !== result.passportNo && !/PASSPORT|P455/i.test(opM2[1])) {
+            result.oldPassportNo = correctIndianPassportNumber(opM2[1]);
+        }
     }
-    // Place of issue — label-anchored; also catches garbled 'PLACE OF IE', 'PLACE OF ISS', 'PLACE OF LEISS'
+    if (result.oldPassportNo && /PASSPORT|P455/i.test(result.oldPassportNo)) {
+        result.oldPassportNo = '';
+    }
+
+    // Place of issue — label-anchored; ignore lines containing 'OLD' or 'DATE AND'
+    const NOISE_WORDS = new Set(['INU','MUN','AREN','LE','EL','SE','TT','PE','BE','SRL','SNM','HE','HI','OO','TEES','TEES I JE']);
     if (!result.placeOfIssue) {
-        const poiM = rawUpper.match(/(?:PLACE\s*OF\s*(?:ISS\w*|LEIS\w*|IE\w*)|ISSUED\s*AT|ISSUE\s*PLACE|OFFICE\s*OF\s*ISSUE)\s*[:\-=]?\s*([A-Z][A-Z\s]{2,40})/);
-        if (poiM && poiM[1]) {
-            const clean = poiM[1].replace(/\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}.*/,'').replace(/[^A-Z\s]/g,'').trim();
-            if (clean.length >= 3) result.placeOfIssue = titleCase(clean.split(/\s+/).slice(0,4).join(' '));
+        for (const l of lines) {
+            const lup = l.toUpperCase();
+            if (/(?:OLD|PREVIOUS|FORMER|DATE\s*AND|DATE\s*&)/.test(lup)) continue;
+            const poiM = lup.match(/(?:PLACE\s*OF\s*(?:ISS\w*|LEIS\w*|IE\w*)|ISSUED\s*AT|ISSUE\s*PLACE|OFFICE\s*OF\s*ISSUE)\s*[:\-=]?\s*([A-Z][A-Z\s]{2,40})/);
+            if (poiM && poiM[1]) {
+                const clean = poiM[1].replace(/\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}.*/,'').replace(/[^A-Z\s]/g,'').trim();
+                if (clean.length >= 3 && !NOISE_WORDS.has(clean)) {
+                    result.placeOfIssue = titleCase(clean.split(/\s+/).slice(0,4).join(' '));
+                    break;
+                }
+            }
         }
     }
     // Also try line-by-line: garbled 'Place of ie' label on one line, city on next
     if (!result.placeOfIssue) {
         for (let li = 0; li < lines.length - 1; li++) {
             const lup = lines[li].toUpperCase();
+            if (/(?:OLD|PREVIOUS|FORMER|DATE\s*AND)/.test(lup)) continue;
             if (/PLACE\s*OF\s*(IE|ISS|LEIS)/.test(lup)) {
                 // Next non-empty line should be the city
                 for (let ni = li + 1; ni <= li + 3 && ni < lines.length; ni++) {
@@ -89,7 +106,7 @@ function applyFieldFallbacks(result, rawText, { lines, visualSurname, visualGive
                     if (cityM) { result.placeOfIssue = titleCase(cityM[1]); break; }
                     // Also take first clean word-only token >= 5 chars as city
                     const firstWord = nup.split(/\s+/)[0];
-                    if (firstWord && firstWord.length >= 5 && /^[A-Z]+$/.test(firstWord)) {
+                    if (firstWord && firstWord.length >= 5 && /^[A-Z]+$/.test(firstWord) && !NOISE_WORDS.has(firstWord)) {
                         result.placeOfIssue = titleCase(firstWord); break;
                     }
                 }
@@ -97,24 +114,22 @@ function applyFieldFallbacks(result, rawText, { lines, visualSurname, visualGive
             }
         }
     }
-// Fallback: pick first KNOWN city name appearing on its own line
-const NOISE_WORDS = new Set(['INU','MUN','AREN','LE','EL','SE','TT','PE','BE','SRL','SNM','HE','HI','OO']);
-if (!result.placeOfIssue) {
-    // Priority 1: a line containing a known passport-issuing city
-    for (const l of lines) {
-        const up = l.toUpperCase().trim();
-        if (/\b(GHAZIABAD|AGRA|DELHI|MUMBAI|CHENNAI|KOLKATA|BENGALURU|HYDERABAD|PUNE|JAIPUR|LUCKNOW)\b/.test(up)
-            && !/(PASSPORT|DOB|BIRTH|EXPIR|ADDRESS|PIN|OLD|PREVIOUS)/.test(up)) {
-            const m = up.match(/\b(GHAZIABAD|AGRA|DELHI|MUMBAI|CHENNAI|KOLKATA|BENGALURU|HYDERABAD|PUNE|JAIPUR|LUCKNOW)\b/);
-            if (m) { result.placeOfIssue = titleCase(m[1]); break; }
+    // Fallback: pick first KNOWN city name appearing on its own line
+    if (!result.placeOfIssue) {
+        for (const l of lines) {
+            const up = l.toUpperCase().trim();
+            if (/\b(GHAZIABAD|AGRA|DELHI|MUMBAI|CHENNAI|KOLKATA|BENGALURU|HYDERABAD|PUNE|JAIPUR|LUCKNOW)\b/.test(up)
+                && !/(PASSPORT|DOB|BIRTH|EXPIR|ADDRESS|PIN|OLD|PREVIOUS)/.test(up)) {
+                const m = up.match(/\b(GHAZIABAD|AGRA|DELHI|MUMBAI|CHENNAI|KOLKATA|BENGALURU|HYDERABAD|PUNE|JAIPUR|LUCKNOW)\b/);
+                if (m) { result.placeOfIssue = titleCase(m[1]); break; }
+            }
         }
     }
-}
-// Priority 2: derive from address
-if (!result.placeOfIssue && result.address) {
-    const cityMatch = result.address.match(/\b(AGRA|DELHI|MUMBAI|GHAZIABAD|CHENNAI|KOLKATA|BENGALURU|HYDERABAD|PUNE|JAIPUR|LUCKNOW)\b/i);
-    if (cityMatch) result.placeOfIssue = titleCase(cityMatch[1]);
-}
+    // Priority 2: derive from address
+    if (!result.placeOfIssue && result.address) {
+        const cityMatch = result.address.match(/\b(AGRA|DELHI|MUMBAI|GHAZIABAD|CHENNAI|KOLKATA|BENGALURU|HYDERABAD|PUNE|JAIPUR|LUCKNOW)\b/i);
+        if (cityMatch) result.placeOfIssue = titleCase(cityMatch[1]);
+    }
 
     // File number — prefer Indian format (letter + 12-16 digits), then label-anchored
     if (!result.fileNo) {
@@ -143,14 +158,29 @@ if (!result.placeOfIssue && result.address) {
             if (m) { result.fileNo = m[0].trim(); break; }
         }
     }
+    // Correct OCR misread of Ghaziabad RPO 'GZ' as '62'
+    if (result.fileNo && /^62\d{12,16}$/.test(result.fileNo)) {
+        result.fileNo = 'GZ' + result.fileNo.slice(2);
+    }
 
     // Place of birth — label-anchored
-    // Place of birth — label-anchored (existing)
     if (!result.placeOfBirth) {
         const pobM = rawUpper.match(/PLACE\s*OF\s*BIRTH\s*[:\-]?\s*([A-Z][A-Z\s,]{2,60})/);
         if (pobM && pobM[1]) {
             const clean = pobM[1].replace(/\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}.*/,'').replace(/[^A-Z\s,]/g,'').trim();
             if (clean.length >= 2) result.placeOfBirth = titleCase(clean.split(/\s+/).slice(0,5).join(' '));
+        }
+    }
+    // Place of birth — City, State pattern on Page 1 (e.g. "MEERUT, UTTAR PRADESH")
+    if (!result.placeOfBirth) {
+        for (const l of lines) {
+            const up = l.toUpperCase().trim();
+            if (/(PASSPORT|DOB|EXPIR|ADDRESS|PIN|OLD|PREVIOUS|DATE|ISSUE)/.test(up)) continue;
+            const stateM = up.match(/\b([A-Z]{3,20}),\s*(UTTAR\s*PRADESH|MADHYA\s*PRADESH|MAHARASHTRA|GUJARAT|PUNJAB|HARYANA|RAJASTHAN|BIHAR|WEST\s*BENGAL|KARNATAKA|TAMIL\s*NADU|KERALA|ODISHA|ASSAM|DELHI|GOA)\b/);
+            if (stateM) {
+                result.placeOfBirth = titleCase(stateM[0]);
+                break;
+            }
         }
     }
     // Additional fallback for place of birth – known city on its own line

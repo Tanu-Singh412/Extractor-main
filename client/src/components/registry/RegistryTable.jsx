@@ -110,6 +110,9 @@ export default function RegistryTable({
       } else if (sortField === "number") {
         valA = a.policyNo || a.passportNo || "";
         valB = b.policyNo || b.passportNo || "";
+      } else if (sortField === "company") {
+        valA = (a.company || "").toLowerCase();
+        valB = (b.company || "").toLowerCase();
       } else if (sortField === "expiry") {
         valA = a.doe || a.effectiveDate || "9999-99-99";
         valB = b.doe || b.effectiveDate || "9999-99-99";
@@ -140,14 +143,15 @@ export default function RegistryTable({
       <div className="table-responsive">
         <table className="passport-table">
           <colgroup>
-            <col style={{ width: "11%" }} />
-            <col style={{ width: "25%" }} />
-            <col style={{ width: "16%" }} />
-            <col style={{ width: "18%" }} />
+            <col style={{ width: "9%" }} />
+            <col style={{ width: "21%" }} />
+            <col style={{ width: "13%" }} />
+            <col style={{ width: "15%" }} />
+            <col style={{ width: "15%" }} />
             <col style={{ width: "9%" }} />
             <col style={{ width: "9%" }} />
-            <col style={{ width: "7%" }} />
             <col style={{ width: "5%" }} />
+            <col style={{ width: "4%" }} />
           </colgroup>
           <thead>
             <tr>
@@ -156,6 +160,9 @@ export default function RegistryTable({
               </th>
               <th className="sortable" onClick={() => handleSort("holder")}>
                 Holder {renderSortIcon("holder")}
+              </th>
+              <th className="sortable" onClick={() => handleSort("company")}>
+                Company {renderSortIcon("company")}
               </th>
               <th className="sortable" onClick={() => handleSort("number")}>
                 {registryDocType === "PASSPORT"
@@ -185,7 +192,7 @@ export default function RegistryTable({
           <tbody>
             {sortedRecords.length === 0 ? (
               <tr>
-                <td colSpan={8}>
+                <td colSpan={9}>
                   <div className="empty-state" style={{ padding: "48px 24px" }}>
                     <div className="empty-icon" style={{ margin: "0 auto 16px" }}>
                       <i className="fa-solid fa-filter-circle-xmark"></i>
@@ -241,6 +248,33 @@ export default function RegistryTable({
                           )}
                         </div>
                       </div>
+                    </td>
+                    <td>
+                      {item.company ? (
+                        <span
+                          className="meta-tag"
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "5px",
+                            background: "#eff6ff",
+                            color: "#1d4ed8",
+                            border: "1px solid #bfdbfe",
+                            borderRadius: "6px",
+                            padding: "2px 8px",
+                            fontSize: "12px",
+                            fontWeight: 500
+                          }}
+                          title={`Company: ${item.company}`}
+                        >
+                          <i className="fa-solid fa-building" style={{ fontSize: "11px" }}></i>
+                          <span style={{ maxWidth: "120px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {item.company}
+                          </span>
+                        </span>
+                      ) : (
+                        <span style={{ color: "#94a3b8", fontSize: "12px" }}>—</span>
+                      )}
                     </td>
                     <td>
                       <div className="doc-num-container" title={rawDocNumber || ""}>

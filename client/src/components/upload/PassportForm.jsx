@@ -1,6 +1,77 @@
 import React, { useState } from "react";
 
-export default function PassportForm({ formState, handleInputChange, formErrors = {} }) {
+export default function PassportForm({
+  formState,
+  handleInputChange,
+  formErrors = {},
+  companies = [],
+  onAddCompany,
+  onEditCompany,
+  onDeleteCompany
+}) {
+  const [isAddingCompany, setIsAddingCompany] = useState(false);
+  const [newCompanyName, setNewCompanyName] = useState("");
+  const [isEditingCompany, setIsEditingCompany] = useState(false);
+  const [editCompanyName, setEditCompanyName] = useState("");
+  const [isSubmittingCompany, setIsSubmittingCompany] = useState(false);
+
+  const handleCreateCompany = async () => {
+    const trimmed = (newCompanyName || "").trim();
+    if (!trimmed || !onAddCompany) return;
+    setIsSubmittingCompany(true);
+    try {
+      const created = await onAddCompany(trimmed);
+      setNewCompanyName("");
+      setIsAddingCompany(false);
+      if (created?.name) {
+        handleInputChange({ target: { name: "company", value: created.name } });
+      }
+    } catch {
+      // Handled in hook
+    } finally {
+      setIsSubmittingCompany(false);
+    }
+  };
+
+  const startEditCompany = () => {
+    if (!formState.company) return;
+    setEditCompanyName(formState.company);
+    setIsEditingCompany(true);
+    setIsAddingCompany(false);
+  };
+
+  const handleUpdateCompany = async () => {
+    const trimmed = (editCompanyName || "").trim();
+    if (!trimmed || !onEditCompany || !formState.company) return;
+    const currentComp = companies.find(c => c.name.toLowerCase() === formState.company.toLowerCase());
+    const targetId = currentComp?.id || formState.company;
+    setIsSubmittingCompany(true);
+    try {
+      const updated = await onEditCompany(targetId, trimmed);
+      setIsEditingCompany(false);
+      if (updated?.name) {
+        handleInputChange({ target: { name: "company", value: updated.name } });
+      }
+    } catch {
+      // Handled in hook
+    } finally {
+      setIsSubmittingCompany(false);
+    }
+  };
+
+  const handleDeleteCompany = async (companyIdOrName) => {
+    if (!onDeleteCompany) return;
+    try {
+      await onDeleteCompany(companyIdOrName);
+      const currentSelected = companies.find(c => (c.id === companyIdOrName || c.name === companyIdOrName));
+      if (formState.company && currentSelected && formState.company === currentSelected.name) {
+        handleInputChange({ target: { name: "company", value: "" } });
+      }
+    } catch {
+      // Handled in hook
+    }
+  };
+
   const [showOptional, setShowOptional] = useState(() => {
     const optionalVals = [
       formState.fatherName,
@@ -172,6 +243,196 @@ export default function PassportForm({ formState, handleInputChange, formErrors 
                 {formErrors.doe}
               </span>
             )}
+          </div>
+
+          {/* Company Field (fitted beside Date of Expiry, with Edit and Add New options) */}
+          <div className="form-group">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+              <label htmlFor="passport-company" style={{ margin: 0, fontWeight: 600 }}>
+                Company <span style={{ fontSize: "12px", color: "#64748b", fontWeight: 400 }}>(Optional)</span>
+              </label>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                {formState.company && !isEditingCompany && !isAddingCompany && (
+                  <button
+                    type="button"
+                    className="btn-text-action"
+                    onClick={startEditCompany}
+                    title={`Edit name of "${formState.company}"`}
+                    style={{
+                      fontSize: "12px",
+                      color: "#4f46e5",
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "3px",
+                      padding: 0,
+                      fontWeight: 600
+                    }}
+                  >
+                    <i className="fa-solid fa-pen-to-square"></i>
+                    Edit
+                  </button>
+                )}
+                {formState.company && !isEditingCompany && !isAddingCompany && (
+                  <button
+                    type="button"
+                    className="btn-text-action"
+                    onClick={() => {
+                      if (window.confirm(`Delete company "${formState.company}" from options?`)) {
+                        handleDeleteCompany(formState.company);
+                      }
+                    }}
+                    title={`Delete "${formState.company}" option`}
+                    style={{
+                      fontSize: "12px",
+                      color: "#ef4444",
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "3px",
+                      padding: 0,
+                      fontWeight: 600
+                    }}
+                  >
+                    <i className="fa-solid fa-trash-can"></i>
+                    Delete
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="btn-text-action"
+                  onClick={() => {
+                    setIsAddingCompany(!isAddingCompany);
+                    setIsEditingCompany(false);
+                  }}
+                  style={{
+                    fontSize: "12px",
+                    color: "#4f46e5",
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "3px",
+                    padding: 0,
+                    fontWeight: 600
+                  }}
+                >
+                  <i className={`fa-solid ${isAddingCompany ? "fa-xmark" : "fa-plus"}`}></i>
+                  {isAddingCompany ? "Cancel" : "+ New"}
+                </button>
+              </div>
+            </div>
+
+            {isAddingCompany && (
+              <div style={{ display: "flex", gap: "6px", marginBottom: "8px", alignItems: "center" }}>
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="New company name..."
+                  value={newCompanyName}
+                  onChange={(e) => setNewCompanyName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleCreateCompany();
+                    }
+                  }}
+                  style={{ fontSize: "13px", height: "36px" }}
+                  autoFocus
+                />
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={handleCreateCompany}
+                  disabled={!newCompanyName.trim() || isSubmittingCompany}
+                  style={{ fontSize: "12px", height: "36px", padding: "0 12px", whiteSpace: "nowrap" }}
+                >
+                  <i className="fa-solid fa-check"></i> Save
+                </button>
+              </div>
+            )}
+
+            {isEditingCompany && (
+              <div style={{ display: "flex", gap: "6px", marginBottom: "8px", alignItems: "center" }}>
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="Edit company name..."
+                  value={editCompanyName}
+                  onChange={(e) => setEditCompanyName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleUpdateCompany();
+                    }
+                  }}
+                  style={{ fontSize: "13px", height: "36px" }}
+                  autoFocus
+                />
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={handleUpdateCompany}
+                  disabled={!editCompanyName.trim() || isSubmittingCompany}
+                  style={{ fontSize: "12px", height: "36px", padding: "0 12px", whiteSpace: "nowrap" }}
+                >
+                  <i className="fa-solid fa-check"></i> Update
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setIsEditingCompany(false)}
+                  style={{ fontSize: "12px", height: "36px", padding: "0 10px" }}
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
+
+            <div className="input-wrapper" style={{ position: "relative" }}>
+              <i className="fa-solid fa-building"></i>
+              <select
+                id="passport-company"
+                name="company"
+                className="form-control"
+                value={formState.company || ""}
+                onChange={handleInputChange}
+                style={{ paddingRight: formState.company ? "70px" : "36px" }}
+              >
+                <option value="">-- Select Company (Optional) --</option>
+                {companies.map((c) => (
+                  <option key={c.id || c.name} value={c.name}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+              {formState.company && (
+                <button
+                  type="button"
+                  onClick={() => handleInputChange({ target: { name: "company", value: "" } })}
+                  title="Unassign company"
+                  style={{
+                    position: "absolute",
+                    right: "32px",
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    background: "none",
+                    border: "none",
+                    color: "#94a3b8",
+                    cursor: "pointer",
+                    padding: "4px",
+                    fontSize: "14px"
+                  }}
+                >
+                  <i className="fa-solid fa-circle-xmark"></i>
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>

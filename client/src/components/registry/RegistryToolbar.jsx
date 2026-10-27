@@ -11,7 +11,10 @@ export default function RegistryToolbar({
   onResetAllFilters,
   expiryWindowDays = 60,
   setExpiryWindowDays,
-  onActivateExpiringSoon
+  onActivateExpiringSoon,
+  companies = [],
+  companyFilter = "ALL",
+  setCompanyFilter
 }) {
   const searchInputRef = useRef(null);
 
@@ -29,6 +32,7 @@ export default function RegistryToolbar({
   const hasActiveFilters =
     registryDocType !== "ALL" ||
     filterMode !== "ALL" ||
+    companyFilter !== "ALL" ||
     Boolean(searchQuery && searchQuery.trim());
 
   const getStatusLabel = (mode) => {
@@ -136,6 +140,72 @@ export default function RegistryToolbar({
               <i className="fa-solid fa-chevron-down expiry-select-caret"></i>
             </div>
           </div>
+
+          {/* Company Filter */}
+          <div
+            className={`company-filter-wrapper ${companyFilter !== "ALL" ? "active" : ""}`}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: "5px 12px",
+              background: companyFilter !== "ALL" ? "#e0e7ff" : "#ffffff",
+              border: companyFilter !== "ALL" ? "1px solid #6366f1" : "1px solid #cbd5e1",
+              borderRadius: "8px",
+              fontSize: "13px",
+              boxShadow: "0 1px 2px rgba(0,0,0,0.05)"
+            }}
+            title="Filter documents by company"
+          >
+            <span style={{ display: "flex", alignItems: "center", gap: "6px", color: companyFilter !== "ALL" ? "#4338ca" : "#64748b", fontWeight: 600 }}>
+              <i className="fa-solid fa-building"></i>
+              <span>Company:</span>
+            </span>
+            <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+              <select
+                value={companyFilter}
+                onChange={(e) => setCompanyFilter(e.target.value)}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  outline: "none",
+                  fontWeight: companyFilter !== "ALL" ? 600 : 500,
+                  color: companyFilter !== "ALL" ? "#312e81" : "#1e293b",
+                  cursor: "pointer",
+                  fontSize: "13px",
+                  paddingRight: "14px"
+                }}
+                aria-label="Filter documents by company"
+              >
+                <option value="ALL">All Companies</option>
+                {companies.map((c) => (
+                  <option key={c.id || c.name} value={c.name}>
+                    {c.name}
+                  </option>
+                ))}
+                <option value="UNASSIGNED">Unassigned / None</option>
+              </select>
+            </div>
+            {companyFilter !== "ALL" && (
+              <button
+                type="button"
+                onClick={() => setCompanyFilter("ALL")}
+                title="Clear company filter"
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "#6366f1",
+                  cursor: "pointer",
+                  padding: "0 2px",
+                  fontSize: "12px",
+                  display: "flex",
+                  alignItems: "center"
+                }}
+              >
+                <i className="fa-solid fa-xmark"></i>
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -152,6 +222,17 @@ export default function RegistryToolbar({
                 className="fa-solid fa-xmark chip-remove"
                 onClick={() => setRegistryDocType("ALL")}
                 title="Remove type filter"
+              ></i>
+            </span>
+          )}
+
+          {companyFilter !== "ALL" && (
+            <span className="filter-chip">
+              <span>Company: <strong>{companyFilter === "UNASSIGNED" ? "Unassigned" : companyFilter}</strong></span>
+              <i
+                className="fa-solid fa-xmark chip-remove"
+                onClick={() => setCompanyFilter("ALL")}
+                title="Remove company filter"
               ></i>
             </span>
           )}

@@ -40,6 +40,12 @@ const PassportSchema = new mongoose.Schema({
     uppercase: true,
     enum: ['PASSPORT']
   },
+  company: {
+    type: String,
+    default: '',
+    trim: true,
+    index: true
+  },
 
   // Document Identifiers (Encrypted at rest with blind search index hash)
   passportNo: {
